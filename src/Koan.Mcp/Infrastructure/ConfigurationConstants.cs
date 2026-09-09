@@ -7,6 +7,7 @@ internal static class ConfigurationConstants
     public static class Keys
     {
         public const string EnableStdioTransport = nameof(EnableStdioTransport);
+        public const string RetiredHttpSseTransport = "EnableHttpSseTransport";
         public const string EnableStreamableHttpTransport = nameof(EnableStreamableHttpTransport);
         public const string EnableLegacySseTransport = nameof(EnableLegacySseTransport);
         public const string RequireAuthentication = nameof(RequireAuthentication);

@@ -130,3 +130,9 @@ See [TECHNICAL.md](TECHNICAL.md) for composition and transport details.
 ## What it adds
 
 Model Context Protocol integration for Koan entity endpoints: discovery, schema, execution, and transports.
+
+## Transport configuration migration
+
+The retired `Koan:Mcp:EnableHttpSseTransport` key fails options validation at startup. Remove it and
+configure `EnableStreamableHttpTransport`. To retain clients using `/mcp/sse` and `/mcp/rpc`, also set
+`EnableLegacySseTransport` explicitly. No transport is enabled implicitly from the retired key.

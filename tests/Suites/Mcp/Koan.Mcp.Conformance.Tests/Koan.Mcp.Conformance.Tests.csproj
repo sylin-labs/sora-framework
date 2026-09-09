@@ -10,6 +10,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\Koan.Mcp.TestKit\Koan.Mcp.TestKit.csproj" />
+    <ProjectReference Include="..\..\..\..\src\Koan.Testing.Hosting\Koan.Testing.Hosting.csproj" />
     <ProjectReference Include="..\..\..\..\src\Connectors\Data\InMemory\Koan.Data.Connector.InMemory.csproj" />
   </ItemGroup>
   <ItemGroup>

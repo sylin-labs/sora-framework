@@ -10,6 +10,7 @@ using Koan.Mcp.Infrastructure;
 using Koan.Mcp.Options;
 using Koan.Mcp.Schema;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Koan.Mcp.Initialization;
@@ -20,7 +21,12 @@ internal static class McpServiceRegistration
     {
         if (services is null) throw new ArgumentNullException(nameof(services));
 
-        services.AddOptions<McpServerOptions>().BindConfiguration(ConfigurationConstants.Section);
+        services.AddOptions<McpServerOptions>()
+            .BindConfiguration(ConfigurationConstants.Section)
+            .Validate<IConfiguration>((_, configuration) =>
+                    configuration[ConfigurationConstants.FullKey(ConfigurationConstants.Keys.RetiredHttpSseTransport)] is null,
+                "Koan:Mcp:EnableHttpSseTransport is retired. Remove it and set EnableStreamableHttpTransport; set EnableLegacySseTransport explicitly if legacy clients still require it.")
+            .ValidateOnStart();
 
         services.TryAddSingleton<SchemaBuilder>();
         services.TryAddSingleton<DescriptorMapper>();

@@ -74,3 +74,9 @@ one camelCase JSON contract while protocol envelopes retain their specification-
 - Runtime facts: `/docs/engineering/runtime-facts.md`
 - ARCH-0111: `/docs/decisions/ARCH-0111-unified-runtime-facts.md`
 - MCP conformance suite: `/tests/Suites/Mcp/Koan.Mcp.Conformance.Tests/`
+
+## Transport configuration migration
+
+The retired `Koan:Mcp:EnableHttpSseTransport` key fails options validation at startup. Remove it and
+configure `EnableStreamableHttpTransport`. To retain clients using `/mcp/sse` and `/mcp/rpc`, also set
+`EnableLegacySseTransport` explicitly. No transport is enabled implicitly from the retired key.

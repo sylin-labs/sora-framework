@@ -191,3 +191,20 @@ No production mutation, new service, remote operation, or package version overri
 Endpoint authority characterization failed all 11 pre-operation cases before the fix. The complete
 InMemory Web adapter suite then passed 92 tests. Three additional post-write cases also pass, for
 14 focused hook-authority cases; committed mutations remain recorded when response processing stops.
+
+## MCP transport migration diagnostics
+
+**Task/application intent:** Declaring MCP HTTP transport cannot silently leave the endpoint absent.
+**Expression:** Current EnableStreamableHttpTransport and explicit EnableLegacySseTransport for retained
+legacy clients. **Guarantee:** A configured retired EnableHttpSseTransport key fails startup with the
+current keys named, including when its old value is false. No implicit transport exposure is inferred.
+**Evidence:** Gposingway health was green while POST /mcp returned 405 because its old key was silently
+ignored by options binding. MCP README/TECHNICAL document separate current opt-ins. Existing registration
+owns binding, and ConfigurationConstants owns stable keys. **Disposition:** Add standard options validation
+at that owner; no alias, new option, public type or application workaround. **Verification:** Host startup
+fails with the retired key and resolves both declared current transports without it. The native MCP
+conformance suite verifies the unchanged transport contract. No external service or production change.
+
+The full MCP conformance suite passes 87 tests, including startup validation of retired transport
+intent and effective current transport options. Gposingway explicitly enables Streamable HTTP and
+retains the deprecated legacy routes for compatibility.
