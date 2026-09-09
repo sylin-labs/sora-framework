@@ -20,6 +20,12 @@ store is internal implementation state; process exit discards every dictionary.
 
 ## Capabilities
 
+`DataCaps.Write.InsertOnly` is implemented with `ConcurrentDictionary.TryAdd` on the physical identity
+map. Managed-field snapshots and Entity family serialization are retained; no preliminary read is used
+to prove absence. The existing conditional-replace RowGate is not part of this insertion guarantee.
+Default identities reject before native dispatch; the ordinary Entity write plan generates string/Guid
+keys, while numeric keys require an explicit non-default value.
+
 The repository declares:
 
 - `FilterExecutionProfile(InMemory, SupportsBoundedCandidates: true)`;

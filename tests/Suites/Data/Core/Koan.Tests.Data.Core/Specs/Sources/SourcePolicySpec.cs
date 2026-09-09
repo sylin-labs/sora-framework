@@ -213,6 +213,8 @@ public sealed class SourcePolicySpec
         var act = () => facade.Upsert(new PolicyEntity { Id = "1" });
 
         await act.Should().ThrowAsync<DataSourcePolicyException>();
+        await FluentActions.Awaiting(() => facade.Insert(new PolicyEntity { Id = "1" }))
+            .Should().ThrowAsync<DataSourcePolicyException>();
         guard.Calls.Should().Be(0);
         inner.ReadinessCalls.Should().Be(0);
         inner.UpsertCalls.Should().Be(0);

@@ -4,6 +4,9 @@ using Koan.Data.Abstractions;
 using Koan.Data.Abstractions.Annotations;
 using Koan.Data.Abstractions.Capabilities;
 using Koan.Data.Abstractions.Filtering;
+using Koan.Data.Abstractions.Failures;
+using Koan.Data.Abstractions.Pipeline;
+using Koan.Data.Core.Pipeline;
 using Koan.Data.Core;
 using Koan.Data.Core.Lifecycle;
 using Koan.Data.Core.Model;
@@ -15,6 +18,123 @@ namespace Koan.Tests.Data.Core.Specs.Entity;
 
 public sealed class EntityExecutionSemanticsSpec
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Insert_transforms_detached_values_but_cannot_retarget_identity(bool changeIdentity)
+    {
+        var repository = new ReceiptRepository(advertiseInsert: true)
+        {
+            InsertResult = payload =>
+            {
+                payload.Value.Should().Be("ENCODED");
+                return new(payload.Id, MutationOutcome.Inserted, payload, DataCommitOutcome.Committed);
+            }
+        };
+        var model = new ReceiptEntity { Id = "one", Value = "plain" };
+        var facade = new RepositoryFacade<ReceiptEntity, string>(repository,
+            fieldTransforms: new StorageFieldTransformPlan([new InsertTransform(changeIdentity)]));
+        if (changeIdentity)
+        {
+            await ((Func<Task>)(() => facade.Insert(model))).Should().ThrowAsync<InvalidOperationException>();
+            repository.InsertCalls.Should().Be(0);
+        }
+        else
+        {
+            var result = await facade.Insert(model);
+            result.Entity.Should().BeSameAs(model);
+            result.Entity!.Value.Should().Be("plain");
+        }
+        model.Id.Should().Be("one");
+        model.Value.Should().Be("plain");
+    }
+
+    private sealed class InsertTransform(bool changeIdentity) : IFieldTransformContributor, IFieldTransform
+    {
+        public string Id => "insert-test-transform";
+        public IFieldTransform? Build(Type entityType) => entityType == typeof(ReceiptEntity) ? this : null;
+        public void ApplyOnWrite(object entity)
+        {
+            var model = (ReceiptEntity)entity;
+            model.Value = "ENCODED";
+            if (changeIdentity) model.Id = "other";
+        }
+        public void ApplyOnRead(object entity) { }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Insert_preserves_lifecycle_without_reading_a_hidden_prior(bool conflict)
+    {
+        var before = 0;
+        var after = 0;
+        var lifecycle = new EntityLifecyclePlan<ReceiptEntity, string>();
+        lifecycle.AddBeforeUpsert(context =>
+        {
+            context.Prior.Should().BeNull();
+            before++;
+            return ValueTask.FromResult(context.Proceed());
+        });
+        lifecycle.AddAfterUpsert(_ => { after++; return ValueTask.CompletedTask; });
+        var repository = new ReceiptRepository(advertiseInsert: true)
+        {
+            InsertResult = model => new(model.Id,
+                conflict ? MutationOutcome.Conflict : MutationOutcome.Inserted,
+                conflict ? null : model,
+                conflict ? DataCommitOutcome.NotCommitted : DataCommitOutcome.Committed)
+        };
+        var facade = new RepositoryFacade<ReceiptEntity, string>(repository, lifecycle: lifecycle);
+        var result = await facade.Insert(new ReceiptEntity { Id = "one" });
+        result.Outcome.Should().Be(conflict ? MutationOutcome.Conflict : MutationOutcome.Inserted);
+        before.Should().Be(1);
+        after.Should().Be(conflict ? 0 : 1);
+        repository.GetCalls.Should().Be(0);
+        repository.UpsertCalls.Should().Be(0);
+        repository.InsertCalls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Unsupported_insert_rejects_before_lifecycle_or_dispatch()
+    {
+        var lifecycle = new EntityLifecyclePlan<ReceiptEntity, string>();
+        lifecycle.AddBeforeUpsert(_ => throw new Exception("Lifecycle must not run"));
+        var repository = new ReceiptRepository();
+        var facade = new RepositoryFacade<ReceiptEntity, string>(repository, lifecycle: lifecycle);
+        await ((Func<Task>)(() => facade.Insert(new ReceiptEntity()))).Should().ThrowAsync<NotSupportedException>();
+        repository.InsertCalls.Should().Be(0);
+        repository.GetCalls.Should().Be(0);
+    }
+
+    [Theory]
+    [InlineData("wrong-key")]
+    [InlineData("updated")]
+    [InlineData("unknown")]
+    [InlineData("conflict-entity")]
+    public async Task Impossible_insert_receipts_never_complete_or_replay(string defect)
+    {
+        var after = 0;
+        var lifecycle = new EntityLifecyclePlan<ReceiptEntity, string>();
+        lifecycle.AddAfterUpsert(_ => { after++; return ValueTask.CompletedTask; });
+        var repository = new ReceiptRepository(advertiseInsert: true)
+        {
+            InsertResult = model => defect switch
+            {
+                "wrong-key" => new("other", MutationOutcome.Inserted, model, DataCommitOutcome.Committed),
+                "updated" => new(model.Id, MutationOutcome.Updated, model, DataCommitOutcome.Committed),
+                "unknown" => new(model.Id, MutationOutcome.Inserted, model, DataCommitOutcome.Unknown),
+                _ => new(model.Id, MutationOutcome.Conflict, model, DataCommitOutcome.NotCommitted)
+            }
+        };
+        var facade = new RepositoryFacade<ReceiptEntity, string>(repository, lifecycle: lifecycle);
+        var error = await ((Func<Task>)(() => facade.Insert(new ReceiptEntity { Id = "one" })))
+            .Should().ThrowAsync<MutationReceiptRejectedException>();
+        error.Which.CommitOutcome.Should().Be(DataCommitOutcome.Unknown);
+        after.Should().Be(0);
+        repository.InsertCalls.Should().Be(1);
+        repository.UpsertCalls.Should().Be(0);
+    }
+
     [Fact]
     public async Task Get_many_normalizes_cardinality_order_duplicates_and_missing_slots()
     {
@@ -322,8 +442,10 @@ public sealed class EntityExecutionSemanticsSpec
     private sealed class ReceiptRepository(
         bool advertiseAtomic = false,
         bool advertiseOutcomes = false,
-        bool advertiseConditional = false) :
+        bool advertiseConditional = false,
+        bool advertiseInsert = false) :
         IDataRepository<ReceiptEntity, string>,
+        IInsertOnlyRepository<ReceiptEntity, string>,
         IQueryRepository<ReceiptEntity, string>,
         IMutationOutcomeRepository<ReceiptEntity, string>,
         IConditionalWriteRepository<ReceiptEntity, string>,
@@ -331,6 +453,8 @@ public sealed class EntityExecutionSemanticsSpec
     {
         public IReadOnlyList<ReceiptEntity?> GetManyResult { get; init; } = [];
         public int GetCalls { get; private set; }
+        public int InsertCalls { get; private set; }
+        public Func<ReceiptEntity, MutationResult<ReceiptEntity, string>>? InsertResult { get; init; }
         public int UpsertCalls { get; private set; }
         public int UpsertManyCalls { get; private set; }
         public int? UpsertManyResult { get; init; }
@@ -345,6 +469,13 @@ public sealed class EntityExecutionSemanticsSpec
             if (advertiseAtomic) capabilities.Add(DataCaps.Write.AtomicBatch);
             if (advertiseOutcomes) capabilities.Add(DataCaps.Write.MutationOutcomes);
             if (advertiseConditional) capabilities.Add(DataCaps.Write.ConditionalReplace);
+            if (advertiseInsert) capabilities.Add(DataCaps.Write.InsertOnly);
+        }
+
+        public Task<MutationResult<ReceiptEntity, string>> Insert(ReceiptEntity model, CancellationToken ct = default)
+        {
+            InsertCalls++;
+            return Task.FromResult(InsertResult!(model));
         }
 
         public Task<ReceiptEntity?> Get(string id, CancellationToken ct = default)

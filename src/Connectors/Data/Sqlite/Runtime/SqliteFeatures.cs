@@ -20,6 +20,7 @@ internal static class SqliteFeatures
         DataCaps.Write.AtomicBatch,
         DataCaps.Write.FastRemove,
         DataCaps.Write.ConditionalReplace,
+        DataCaps.Write.InsertOnly,
         DataCaps.Isolation.RowScoped,
         DataCaps.Isolation.ContainerScoped,
         DataCaps.Isolation.DatabaseScoped

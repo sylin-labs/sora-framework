@@ -20,7 +20,7 @@ with links to the actual deliverable and evidence.
 ## Initiative state
 
 - Overall: active; shared-foundation milestone proved with published Koan dependencies.
-- Active implementation card: none; AE-01a complete.
+- Active implementation card: [AE-07 scoped insert safety](work-items/07-scoped-insert-safety.md), discovered during brownfield characterization; 59 focused tests and independent review pass, public-package consumer acceptance remains open.
 - Next: AE-02 task contracts and AE-03 caller boundaries.
 - Independent participants: none recruited; results and productivity measurements unavailable.
 
@@ -35,6 +35,7 @@ with links to the actual deliverable and evidence.
 | [AE-04 Change review](work-items/04-change-review.md) | planned | Requires changes and behavior evidence from AE-02 and AE-03 |
 | [AE-05 Incremental adoption](work-items/05-incremental-adoption.md) | planned | Requires AE-01's bounded feature/foundation |
 | [AE-06 Independent validation](work-items/06-independent-validation.md) | planned | Requires internal findings, a recorded pilot decision, and consenting participants |
+| [AE-07 Scoped insert safety](work-items/07-scoped-insert-safety.md) | in-progress | Atomic insert boundary and native provider proofs accepted locally; constrained bulk creates reject pending native mixed-write guarantees. Public-package consumer validation remains open. |
 
 Use `in-progress`, `blocked`, `done`, or `stopped` as execution proceeds. A blocker names the
 missing input and useful restart point; stopped work retains its findings. Front matter in

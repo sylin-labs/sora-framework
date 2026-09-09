@@ -46,6 +46,7 @@ internal static class Constants
     {
         internal const string Identity = "_id";
         internal const string ManagedDocument = "__koan_document";
+        internal const string SetOnInsert = "$setOnInsert";
     }
 
     internal static class Index

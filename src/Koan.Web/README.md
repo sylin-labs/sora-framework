@@ -62,6 +62,17 @@ surface. Static-file wiring stays dormant in API-only hosts that have no real we
 
 ## Boundaries and failures
 
+- A constrained Create branch uses atomic insertion. An identity collision returns existence-hiding
+  404, including identities hidden by request predicates. Unsupported providers return 501 with
+  `web.mutation.insertUnsupported`. Ordinary unconstrained upsert keeps its existing semantics.
+- Mutation constraints mean declared Create/Update predicates or stamps. A read-only realization
+  does not constrain writes. Existing coarse authorization, including server grants, remains authoritative.
+- Constrained bulk requests with any new or unavailable identity currently return 501 with
+  `web.mutation.bulkCreateUnsupported` before persistence. Submit creates individually. An update-only
+  batch retains its existing behavior. This is an interim compatibility boundary, not atomic bulk support.
+- Dry-run remains a tentative validation preview; it cannot prove identity availability or reserve a key.
+  Existing authorized-update races require a separate conditional-write guarantee.
+
 - This package projects capabilities into ASP.NET Core; it is not a standalone server and does not choose a data
   provider. Use `Sylin.Koan.App` for the shortest web entry bundle or compose lower-level packages deliberately.
 - `EntityController<T>` exposes direct Entity CRUD. It does not infer workflow endpoints, recursive graph traversal,

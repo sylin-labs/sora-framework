@@ -49,6 +49,7 @@ internal sealed class RepositoryFacade<TEntity, TKey> :
     IDataOperationGate,
     IDataRouteBoundRepository,
     IDataMutationOutcomes<TEntity, TKey>,
+    IInsertOnlyRepository<TEntity, TKey>,
     IDataQueryBoundary<TEntity, TKey>,
     Koan.Data.Abstractions.Analytics.IAnalyticsQueryComposer<TEntity>
     where TEntity : class, IEntity<TKey>
@@ -811,6 +812,64 @@ internal sealed class RepositoryFacade<TEntity, TKey> :
         var persisted = await PersistPreparedUpsert(context.Current, segmentation, ct);
         await _lifecycle.CompleteUpsert(context, persisted);
         return context.Current;
+    }
+
+    public async Task<MutationResult<TEntity, TKey>> Insert(TEntity model, CancellationToken ct = default)
+    {
+        await using var operationScope = await Guard(DataOperationEffect.Write, "entity insert", ct, ensureReadiness: false);
+        ArgumentNullException.ThrowIfNull(model);
+        if (EntityContext.Current?.TransactionCoordinator is not null)
+            throw new NotSupportedException(
+                "Atomic insertion cannot run in a deferred coordination scope. Perform the insertion outside that scope.");
+        if (!DataCaps.Describe(_inner, _inner.GetType().Name).Has(DataCaps.Write.InsertOnly) ||
+            _inner is not IInsertOnlyRepository<TEntity, TKey> inserts)
+            throw new NotSupportedException(
+                $"The adapter backing {typeof(TEntity).Name} cannot guarantee atomic insertion for this identity shape. " +
+                "Select a connector and identity shape that support insert-only writes.");
+        if (_sourcePlan.UsesLegacyProvisioningReadiness) await _inner.EnsureReady(ct);
+
+        // An attempted insert has no prior row. Never turn read visibility into an absence proof,
+        // and never fetch a hidden collision into lifecycle state.
+        EntityLifecycleContext<TEntity>? context = null;
+        if (_lifecycle is { HasUpsert: true })
+            context = await _lifecycle.BeginUpsert(model, _ => new ValueTask<TEntity?>((TEntity?)null), ct);
+        var current = context?.Current ?? model;
+        WritePlanFor(current).ApplyAll(current);
+        var submittedKey = current.Id;
+        var payload = WritePayload(current);
+        if (!EqualityComparer<TKey>.Default.Equals(payload.Id, submittedKey))
+            throw new InvalidOperationException("A field transform cannot change an insertion's identity. Preserve the submitted identity in the storage payload.");
+        var values = CurrentManagedValues(operationScope.Segmentation);
+        MutationResult<TEntity, TKey> result;
+        if (values is null) result = await inserts.Insert(payload, ct);
+        else
+        {
+            using (ManagedFieldWriteScope.Enter(values)) result = await inserts.Insert(payload, ct);
+        }
+
+        if (result is null)
+            throw new MutationReceiptRejectedException(typeof(TEntity).FullName ?? typeof(TEntity).Name,
+                "Insertion must return a commit receipt.", DataCommitOutcome.Unknown);
+        var sameKey = EqualityComparer<TKey>.Default.Equals(result.Key, payload.Id) &&
+            (EqualityComparer<TKey>.Default.Equals(submittedKey, default!) ||
+             EqualityComparer<TKey>.Default.Equals(submittedKey, result.Key));
+        if (sameKey && result.Outcome == MutationOutcome.Conflict &&
+            result.CommitOutcome == DataCommitOutcome.NotCommitted && result.Entity is null)
+            return result;
+        if (!sameKey || EqualityComparer<TKey>.Default.Equals(result.Key, default!) ||
+            result.Outcome != MutationOutcome.Inserted || result.CommitOutcome != DataCommitOutcome.Committed ||
+            result.Entity is null || !EqualityComparer<TKey>.Default.Equals(result.Entity.Id, result.Key))
+            throw new MutationReceiptRejectedException(
+                typeof(TEntity).FullName ?? typeof(TEntity).Name,
+                "Insertion must report the same identity and either Inserted/Committed or Conflict/NotCommitted without an entity.",
+                DataCommitOutcome.Unknown);
+
+        // A transformed payload is detached. Copy only the native generated identity back; its
+        // encrypted field values must never become the application or lifecycle result.
+        if (!EqualityComparer<TKey>.Default.Equals(current.Id, result.Key))
+            AggregateMetadata.GetIdSpec(current.GetType())!.Prop.SetValue(current, result.Key);
+        if (context is not null) await _lifecycle!.CompleteUpsert(context, current);
+        return result with { Entity = current };
     }
 
     async Task<MutationResult<TEntity, TKey>> IDataMutationOutcomes<TEntity, TKey>.UpsertWithOutcome(

@@ -4,6 +4,7 @@ using Koan.Data.Core.Model;
 using Koan.Data.Core.Transactions;
 using Koan.Tests.Data.Core.Support;
 using AwesomeAssertions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Koan.Tests.Data.Core.Specs.Transactions;
 
@@ -13,6 +14,22 @@ namespace Koan.Tests.Data.Core.Specs.Transactions;
 /// </summary>
 public sealed class TransactionBasicsSpec
 {
+    [Fact]
+    public async Task Insert_only_rejects_deferred_coordination_without_tracking_or_persistence()
+    {
+        await using var runtime = await DataCoreRuntimeFixture.CreateAsync();
+        using var route = EntityContext.With(adapter: "inmemory", partition: Guid.NewGuid().ToString("N"));
+        var model = new TodoEntity { Id = Guid.NewGuid().ToString("N"), Title = "Not inserted" };
+        var repository = runtime.Services.GetRequiredService<IDataService>().GetRepository<TodoEntity, string>();
+        using (EntityContext.Transaction("insert-not-deferred"))
+        {
+            await ((Func<Task>)(() => ((IInsertOnlyRepository<TodoEntity, string>)repository).Insert(model)))
+                .Should().ThrowAsync<NotSupportedException>();
+            await EntityContext.Commit();
+        }
+        (await TodoEntity.Get(model.Id)).Should().BeNull();
+    }
+
     private readonly ITestOutputHelper _output;
 
     public TransactionBasicsSpec(ITestOutputHelper output)

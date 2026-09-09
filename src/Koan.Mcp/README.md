@@ -136,3 +136,6 @@ Model Context Protocol integration for Koan entity endpoints: discovery, schema,
 The retired `Koan:Mcp:EnableHttpSseTransport` key fails options validation at startup. Remove it and
 configure `EnableStreamableHttpTransport`. To retain clients using `/mcp/sse` and `/mcp/rpc`, also set
 `EnableLegacySseTransport` explicitly. No transport is enabled implicitly from the retired key.
+Rejected entity mutations carry no state delta. Constrained Create uses the same atomic insertion
+boundary as REST; a dry-run previews caller-visible intent without reserving an identity or proving
+that a later insertion will succeed.

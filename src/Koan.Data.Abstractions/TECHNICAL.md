@@ -162,3 +162,10 @@ Queries use the same spelling. Ordinary enum ordering uses declared ordinal rank
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
 Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+## Atomic insertion contract
+
+`IInsertOnlyRepository<TEntity,TKey>.Insert` requires native physical identity uniqueness. Success
+returns the submitted entity with its assigned key and Inserted/Committed. A proven collision returns
+Conflict/NotCommitted with the submitted key and no entity. It never loads or returns the existing row.
+Unsupported shape, unrelated constraint errors, cancellation after dispatch, and uncertain commit must
+not become collision receipts. `DataCaps.Write.InsertOnly` is shape-qualified by the selected repository.

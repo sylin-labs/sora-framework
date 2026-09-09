@@ -4,11 +4,33 @@ using Koan.Data.Abstractions;
 using Koan.Data.Core.Model;
 using Koan.Data.Core.Polymorphism;
 using Koan.Tests.Data.Core.EntityFamilyFixtures;
+using Koan.Core;
+using Koan.Data.Core;
+using Koan.Testing.Integration;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Koan.Tests.Data.Core.Specs.Entity;
 
 public sealed class EntityFamilyCompanionSpec
 {
+    [Fact]
+    public async Task Insert_through_a_variant_preserves_root_identity_collisions()
+    {
+        await using var host = await KoanIntegrationHost.Configure()
+            .ConfigureServices(services => services.AddKoan()).StartAsync(TestContext.Current.CancellationToken);
+        using var route = EntityContext.With(adapter: "inmemory", partition: Guid.NewGuid().ToString("N"));
+        var root = await new GeneratedFamilyMedia { Kind = "root" }.Save();
+        var repository = host.Services.GetRequiredService<IDataService>().GetRepository<GeneratedFamilyAnime, string>();
+        var inserts = (IInsertOnlyRepository<GeneratedFamilyAnime, string>)repository;
+        var conflict = await inserts.Insert(new GeneratedFamilyAnime { Id = root.Id, Kind = "anime", Episodes = 12 });
+        conflict.Outcome.Should().Be(MutationOutcome.Conflict);
+        conflict.Entity.Should().BeNull();
+        (await GeneratedFamilyMedia.Get(root.Id))!.Kind.Should().Be("root");
+        var inserted = await inserts.Insert(new GeneratedFamilyAnime { Kind = "new", Episodes = 24 });
+        inserted.Outcome.Should().Be(MutationOutcome.Inserted);
+        (await GeneratedFamilyAnime.Get(inserted.Key))!.Episodes.Should().Be(24);
+    }
+
     [Fact]
     public void Generated_companion_preserves_the_root_and_carries_the_family_contract()
     {

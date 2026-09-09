@@ -39,6 +39,8 @@ internal static class MongoFeatures
     public static void Declare(IDataClaims claims)
     {
         foreach (var capability in All) claims.Capability(capability);
+        // Availability is qualified by the selected repository's identity shape.
+        claims.Capability(DataCaps.Write.InsertOnly);
     }
 
     public static void Describe(ICapabilities capabilities)

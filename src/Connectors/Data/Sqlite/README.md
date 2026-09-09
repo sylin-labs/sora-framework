@@ -85,6 +85,10 @@ See [TECHNICAL.md](TECHNICAL.md) for guarantees and limits.
 
 ## Limits
 
+Constrained single-item creates cannot replace an existing identity, including one hidden by request visibility.
+SQLite requires native identity uniqueness for this operation. Constrained bulk requests containing creates
+currently reject before persistence. Ordinary Entity `Save` remains an upsert.
+
 Configuration decides participation; unsupported requests reject before provider work with a named capability and a correction. Provider-specific limits live in the package's TECHNICAL.md.
 
 ## Enum storage contract

@@ -26,6 +26,12 @@ dotnet add package Sylin.Koan.Data.Core
 
 ## Usage - quick examples
 
+Constrained generated endpoints automatically use Data's insert-only terminal when their visible read
+cannot find the submitted identity. The elected adapter must support native atomic insertion; no
+application registration or new Entity verb is required. Existing `Save` remains an upsert. A conflicting
+insert exposes no prior row and runs no completion lifecycle. This does not make authorized updates
+conditional on their earlier read or provide atomic mixed bulk writes.
+
 - Prefer first-class model statics for top-level data access in your app models:
   - `Item.All(ct)`
   - `Item.Query(predicate, ct)`

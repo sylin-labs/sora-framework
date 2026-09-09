@@ -38,6 +38,18 @@ declared physical binding.
 
 ## Query and mutation execution
 
+`IInsertOnlyRepository.Insert` supports ordinary managed `_id` storage. Its native `UpdateOne` matches only `_id`
+and uses only `$setOnInsert` with upsert enabled. A match performs no modification and returns a conflict without
+reading the existing document. An acknowledged upsert receipt with the submitted BSON identity proves insertion.
+Unacknowledged writes reject before entity persistence; uncertain driver failures remain failures. Unrelated
+unique-key violations are not converted to identity conflicts. Concurrent duplicate-key failures, if returned by
+the server instead of a match receipt, remain failures rather than guessed commit outcomes.
+
+Explicit mappings do not advertise this capability and reject insert-only execution, since their identity fields
+do not necessarily have a native unique index. Ordinary `Save` and mapped upsert behavior remain unchanged.
+Constrained bulk requests containing create-classified items reject before persistence. This contract does not
+close the separate race between authorization of an existing row and its subsequent ordinary update.
+
 `MongoQueryCompiler` lowers the declared filter floor, nested canonical paths, exact sort prefixes, explicit pages,
 and counts to driver definitions over physical BSON names. Unsupported CLR residuals do not enter the repository.
 Identity batches are bounded; bulk writes are ordered and require acknowledged driver receipts.
@@ -100,10 +112,15 @@ explicit bounds.
 ## Capability truth
 
 The adapter declares native LINQ/filter execution, provider-bounded paging, bulk upsert/delete, conditional replace,
+and insert-only availability qualified by the repository's identity shape,
 TTL indexes, and row/container/database isolation. It does not declare `AtomicBatch` or `FastRemove`. Query receipts
 report only work completed by MongoDB.
 
 ## Verification
+
+The focused `MongoInsertOnlySpec` proves native BSON preservation after identity conflict, one committed insertion
+under eight concurrent attempts, unrelated unique-index failures, and mapped-identity rejection before persistence.
+It also proves that default numeric keys reject before inserting an `_id: 0` document.
 
 The connector project and test project build with zero warnings. The real MongoDB 8.3 suite passes 40/40, covering
 managed CRUD, filtering convergence, comparable values, identity types, partitions, routing, discovery, health,

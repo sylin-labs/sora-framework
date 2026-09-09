@@ -14,6 +14,11 @@ public static class KoanWebConstants
 
     public static class Codes
     {
+        public static class Mutation
+        {
+            public const string InsertUnsupported = "web.mutation.insertUnsupported";
+            public const string BulkCreateUnsupported = "web.mutation.bulkCreateUnsupported";
+        }
         public static class Patch
         {
             public const string IdMismatch = "web.patch.idMismatch";

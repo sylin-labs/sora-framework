@@ -24,6 +24,11 @@ var published = await Book.Query(item => item.Published);
 
 No MongoDB repository, client, serializer registration, or collection bootstrap appears in application code.
 
+Constrained single-item creates use atomic insert-only execution for ordinary managed `_id` storage. An existing
+identity cannot be replaced through that create path. Explicit mappings and constrained bulk requests containing
+creates currently reject before persistence. Ordinary Entity `Save` remains an upsert.
+Default numeric keys reject before insertion; assign a non-default identity for those Entity types.
+
 Existing equivalent indexes keep their names across framework upgrades when the model does not explicitly name
 them. Koan checks their constraints once per physical collection. Incompatible constraints or explicit names
 require an operator migration; the connector never drops or renames an existing index automatically.

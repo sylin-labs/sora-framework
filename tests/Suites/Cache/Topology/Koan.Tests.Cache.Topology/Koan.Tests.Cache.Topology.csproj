@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\..\..\src\Connectors\Data\InMemory\Koan.Data.Connector.InMemory.csproj" />
     <ProjectReference Include="..\..\..\..\..\src\Koan.Cache\Koan.Cache.csproj" />
     <ProjectReference Include="..\..\..\..\..\src\Koan.Cache.Abstractions\Koan.Cache.Abstractions.csproj" />
     <ProjectReference Include="..\..\..\..\..\src\Koan.Communication\Koan.Communication.csproj" />

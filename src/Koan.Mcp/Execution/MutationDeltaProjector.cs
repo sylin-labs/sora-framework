@@ -34,6 +34,7 @@ internal static class MutationDeltaProjector
     {
         var items = result.Context.Items;
         var dryRun = items.TryGetValue(EntityMutationProbe.DryRunKey, out var dr) && dr is true;
+        if (result.IsShortCircuited) return (dryRun, null);
 
         // Batch mutations carry a count-level delta (no per-field diff).
         if (items.TryGetValue(EntityMutationProbe.AffectedCountKey, out var ac) && ac is int affected)

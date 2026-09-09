@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Linq.Expressions;
 using Koan.Core.Capabilities;
 using Koan.Data.Abstractions;
+using Koan.Data.Abstractions.Failures;
 using Koan.Data.Core.KeyValue;
 using Koan.Data.Core.Polymorphism;
 
@@ -10,11 +11,27 @@ namespace Koan.Data.Connector.InMemory.Runtime;
 /// <summary>Translates the KeyValue family primitives to detached host-memory snapshots.</summary>
 internal sealed class InMemoryRepository<TEntity, TKey>(InMemoryState state, string source)
     : KeyValueStore<TEntity, TKey>,
-      IConditionalWriteRepository<TEntity, TKey>
+      IConditionalWriteRepository<TEntity, TKey>,
+      IInsertOnlyRepository<TEntity, TKey>
     where TEntity : class, IEntity<TKey>
     where TKey : notnull
 {
     private static readonly Type RootType = EntityRootDescriptor.For(typeof(TEntity)).RootType;
+
+    public Task<MutationResult<TEntity, TKey>> Insert(TEntity model, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        ct.ThrowIfCancellationRequested();
+        if (EqualityComparer<TKey>.Default.Equals(model.Id, default!))
+            throw new NotSupportedException("InMemory insert-only requires a non-default identity. Assign the entity identity before insertion.");
+        var snapshot = new InMemoryState.Record(
+            EntityJsonSerialization.SerializeDocument(model), CopyManaged(SnapshotManaged()));
+        var inserted = Current().TryAdd(model.Id, snapshot);
+        return Task.FromResult(new MutationResult<TEntity, TKey>(model.Id,
+            inserted ? MutationOutcome.Inserted : MutationOutcome.Conflict,
+            inserted ? model : null,
+            inserted ? DataCommitOutcome.Committed : DataCommitOutcome.NotCommitted));
+    }
 
     /// <summary>Guarded conditional replace (the in-memory analogue of the relational CAS): the store is
     /// a concurrent snapshot map, so the read→guard→write sequence runs under the adapter gate — the

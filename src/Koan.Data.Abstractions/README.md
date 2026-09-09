@@ -92,6 +92,14 @@ MCP, or another projection must normalize its protocol into that operation befor
 See [TECHNICAL.md](https://github.com/sylin-org/koan-framework/blob/main/src/Koan.Data.Abstractions/TECHNICAL.md)
 for query ownership, capability semantics, and adapter compatibility rules.
 
+## Atomic insertion contract
+
+`IInsertOnlyRepository<TEntity,TKey>` is an optional native write guarantee, advertised through
+`DataCaps.Write.InsertOnly`. It inserts an absent physical identity and never replaces an existing row.
+Reuse `MutationResult` for Inserted/Committed or Conflict/NotCommitted with no existing entity.
+Ordinary `IDataRepository.Upsert` and `IMutationOutcomeRepository.UpsertWithOutcome` remain upserts.
+Unsupported identity shapes fail before persistence; ambiguous native outcomes remain failures.
+
 ## Enum storage contract
 
 Default Entity storage preserves enum names as strings, including nullable values, nested values, collections,

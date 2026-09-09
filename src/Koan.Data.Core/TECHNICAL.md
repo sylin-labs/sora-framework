@@ -51,6 +51,14 @@ validation:
 
 ## Entity lifecycle ownership
 
+- The optional insert-only terminal enters the same source guard, operation horizon, write plan,
+  managed write scope, and field transforms as Save. It negotiates support before provisioning
+  readiness and uses upsert lifecycle with `Prior = null`, without reading a collision. Field transforms
+  cannot change the dispatched identity. Only a verified Inserted/Committed receipt runs completion.
+- Deferred coordination cannot supply an immediate atomic insertion receipt and rejects. Cache and
+  Entity variants forward insertion through the existing semantic boundary. Generated identifiers
+  propagate from detached storage payloads without replacing the plaintext application model.
+
 - `TEntity.Lifecycle` declares persistence behavior inside `AddKoan(() => ...)` or Koan module
   registration. The builder is static syntax; every plan and handler list belongs to one host.
 - The outer `RepositoryFacade` is the single execution boundary. Provider/module decorators sit

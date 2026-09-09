@@ -1,6 +1,8 @@
 using System.Linq.Expressions;
 using Koan.Core.Capabilities;
 using Koan.Data.Abstractions;
+using Koan.Data.Abstractions.Capabilities;
+using Koan.Data.Abstractions.Failures;
 using Koan.Data.Abstractions.Filtering;
 using Koan.Data.Abstractions.Instructions;
 using Koan.Data.Abstractions.Naming;
@@ -21,6 +23,7 @@ internal sealed class MongoRepository<TEntity, TKey> :
     IBoundedQueryRepository<TEntity, TKey>,
     IOptimizedDataRepository<TEntity, TKey>,
     IConditionalWriteRepository<TEntity, TKey>,
+    IInsertOnlyRepository<TEntity, TKey>,
     IInstructionExecutor<TEntity>,
     IDescribesCapabilities,
     IBulkUpsert<TKey>,
@@ -63,7 +66,11 @@ internal sealed class MongoRepository<TEntity, TKey> :
 
     public StorageOptimizationInfo OptimizationInfo => _entity.Optimization;
 
-    public void Describe(ICapabilities capabilities) => MongoFeatures.Describe(capabilities);
+    public void Describe(ICapabilities capabilities)
+    {
+        MongoFeatures.Describe(capabilities);
+        if (!_entity.IsMapped) capabilities.Add(DataCaps.Write.InsertOnly);
+    }
 
     public Task EnsureReady(CancellationToken ct = default) => _schema.Ensure(CollectionName(), ct);
 
@@ -106,6 +113,38 @@ internal sealed class MongoRepository<TEntity, TKey> :
         var collection = await Collection(ct).ConfigureAwait(false);
         await Replace(collection, model, session: null, ct).ConfigureAwait(false);
         return model;
+    }
+
+    public async Task<MutationResult<TEntity, TKey>> Insert(TEntity model, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        if (EqualityComparer<TKey>.Default.Equals(model.Id, default!))
+            throw new NotSupportedException("MongoDB insert-only requires a non-default identity. Assign the entity identity before insertion.");
+        if (_entity.IsMapped)
+            throw new NotSupportedException(
+                "MongoDB insert-only requires ordinary managed _id storage. Explicit mappings have not proved native identity uniqueness.");
+        var document = _entity.Write(model);
+        var identity = document[Infrastructure.Constants.Storage.Identity];
+        if (identity.IsBsonNull)
+            throw new NotSupportedException("MongoDB insert-only requires an assigned entity identity before persistence.");
+        var collection = await Collection(ct).ConfigureAwait(false);
+        if (!collection.Settings.WriteConcern.IsAcknowledged)
+            throw new NotSupportedException("MongoDB insert-only requires acknowledged writes. Configure a nonzero write concern.");
+
+        // Matching an identity performs no update. Only a newly inserted document receives these fields.
+        // The native match receipt proves collision without fetching an existing row or parsing driver errors.
+        var result = await collection.UpdateOneAsync(
+            _entity.Identity(model.Id),
+            new BsonDocumentUpdateDefinition<BsonDocument>(new BsonDocument(Infrastructure.Constants.Storage.SetOnInsert, document)),
+            new UpdateOptions { IsUpsert = true },
+            ct).ConfigureAwait(false);
+        DemandAcknowledged(result.IsAcknowledged);
+        if (result.UpsertedId is { } inserted && inserted.Equals(identity) && result.MatchedCount == 0)
+            return new(model.Id, MutationOutcome.Inserted, model, DataCommitOutcome.Committed);
+        if (result.UpsertedId is null && result.MatchedCount == 1 &&
+            result.IsModifiedCountAvailable && result.ModifiedCount == 0)
+            return new(model.Id, MutationOutcome.Conflict, null, DataCommitOutcome.NotCommitted);
+        throw new InvalidOperationException("MongoDB insert-only did not return a verified insertion or unchanged identity collision.");
     }
 
     public async Task<int> UpsertMany(IEnumerable<TEntity> models, CancellationToken ct = default)

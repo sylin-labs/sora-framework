@@ -8,10 +8,11 @@ namespace Koan.Data.Core.Polymorphism;
 /// </summary>
 internal sealed class EntityVariantRepository<TRoot, TVariant, TKey> :
     IDataRepository<TVariant, TKey>,
+    IInsertOnlyRepository<TVariant, TKey>,
     IQueryRepository<TVariant, TKey>,
     IDescribesCapabilities
     where TRoot : class, IEntity<TKey>
-    where TVariant : TRoot, IEntity<TKey>
+    where TVariant : class, TRoot, IEntity<TKey>
     where TKey : notnull
 {
     private readonly Func<IDataRepository<TRoot, TKey>> _root;
@@ -36,6 +37,16 @@ internal sealed class EntityVariantRepository<TRoot, TVariant, TKey> :
         using var _ = EntityMaterializationScope.Enter(typeof(TRoot), typeof(TVariant));
         var values = await root.GetMany(ids, ct).ConfigureAwait(false);
         return values.Select(Convert).ToArray();
+    }
+
+    public async Task<MutationResult<TVariant, TKey>> Insert(TVariant model, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        EntityTypeCatalog.Register(typeof(TVariant));
+        if (_root() is not IInsertOnlyRepository<TRoot, TKey> inserts)
+            throw new NotSupportedException($"The root repository for {typeof(TVariant).Name} does not support atomic insertion.");
+        var result = await inserts.Insert(model, ct).ConfigureAwait(false);
+        return new(result.Key, result.Outcome, Convert(result.Entity), result.CommitOutcome);
     }
 
     public async Task<TVariant> Upsert(TVariant model, CancellationToken ct = default)

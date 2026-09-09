@@ -2,6 +2,7 @@ using System.Collections.Frozen;
 using System.Linq.Expressions;
 using Koan.Core.Capabilities;
 using Koan.Data.Abstractions;
+using Koan.Data.Abstractions.Failures;
 using Koan.Data.Abstractions.Filtering;
 using Koan.Data.Abstractions.Instructions;
 using Koan.Data.Abstractions.Naming;
@@ -30,6 +31,7 @@ internal sealed class SqliteRepository<TEntity, TKey> :
     IBoundedQueryRepository<TEntity, TKey>,
     IOptimizedDataRepository<TEntity, TKey>,
     IConditionalWriteRepository<TEntity, TKey>,
+    IInsertOnlyRepository<TEntity, TKey>,
     IInstructionExecutor<TEntity>,
     IDescribesCapabilities,
     IBulkUpsert<TKey>,
@@ -124,6 +126,51 @@ internal sealed class SqliteRepository<TEntity, TKey> :
         await using var connection = await Open(ct).ConfigureAwait(false);
         await Upsert(connection, null, plan, model, ct).ConfigureAwait(false);
         return model;
+    }
+
+    public async Task<MutationResult<TEntity, TKey>> Insert(TEntity model, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        var plan = Plan();
+        if (EqualityComparer<TKey>.Default.Equals(model.Id, default!) && !plan.Mapping.Identity.IsGenerated)
+            throw new NotSupportedException("SQLite insert-only requires a non-default identity unless the mapping declares Generated. Assign the entity identity before insertion.");
+        _route.Policy.Demand(DataOperationEffect.Write, "insert");
+        await Ready(plan, ct).ConfigureAwait(false);
+        await using var connection = await Open(ct).ConfigureAwait(false);
+        var generated = plan.Mapping.Identity.IsGenerated && EqualityComparer<TKey>.Default.Equals(model.Id, default!);
+        var write = generated ? plan.Commands.Insert(model) : plan.Commands.Update(model);
+        await using var command = PrepareInsert(connection, null, plan, write, includeConflict: false);
+        // Override any external table conflict policy, including REPLACE. A trigger's IGNORE is
+        // not an identity collision receipt, so zero affected rows remain an unverified failure.
+        command.CommandText = command.CommandText.Insert("INSERT".Length, " OR ABORT");
+        try
+        {
+            if (generated)
+            {
+                command.CommandText += $" RETURNING {SqliteDialect.Quote(plan.IdentityRoots.Single())}";
+                var key = await command.ExecuteScalarAsync(ct).ConfigureAwait(false);
+                if (key is null or DBNull)
+                    throw new InvalidOperationException("SQLite insert did not return its generated identity.");
+                plan.AssignGenerated(model, key);
+            }
+            else if (await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 1)
+                throw new InvalidOperationException("SQLite insert did not return a single-row mutation receipt.");
+        }
+        catch (SqliteException error) when (IsIdentityCollision(error, plan))
+        {
+            return new(model.Id, MutationOutcome.Conflict, null, DataCommitOutcome.NotCommitted);
+        }
+        return new(model.Id, MutationOutcome.Inserted, model, DataCommitOutcome.Committed);
+    }
+
+    private static bool IsIdentityCollision(SqliteException error, SqliteEntityPlan<TEntity, TKey> plan)
+    {
+        if (error.SqliteExtendedErrorCode != Infrastructure.Constants.PrimaryKeyConstraint) return false;
+        // The code alone could describe a different table's key violation inside an external trigger.
+        // Match schema names only. Unknown diagnostics remain failures rather than guessed conflicts.
+        var target = string.Join(", ", plan.IdentityRoots.Select(root => $"{plan.Mapping.Container.Name}.{root}"));
+        return error.Message.EndsWith(
+            $"'{Infrastructure.Constants.UniqueConstraintFailure}{target}'.", StringComparison.Ordinal);
     }
 
     public async Task<bool> Delete(TKey id, CancellationToken ct = default) =>

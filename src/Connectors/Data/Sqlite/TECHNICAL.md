@@ -66,6 +66,19 @@ construction or provider I/O. The two decisions are independent.
 
 ## Bulk and batch
 
+Constrained single-item endpoint creates use `IInsertOnlyRepository.Insert`. SQLite executes `INSERT OR ABORT`,
+overriding any external table replacement policy. Only a native primary-key violation naming the validated table
+and identity columns produces a conflict receipt; other constraints remain failures. Zero affected rows, including
+an external trigger's `RAISE(IGNORE)`, do not prove collision or a safe commit outcome. Schema validation requires
+the declared identity to match the native primary key before dispatch. Provider-generated identities
+use `RETURNING` and are propagated to the submitted entity and receipt. Ordinary `Save` remains an upsert.
+
+The initial constrained bulk surface rejects any create-classified item before persistence; this insert contract
+does not claim atomic mixed insert/update execution. Existing authorized-update races remain outside its guarantee.
+
+`SqliteInsertOnlySpec` verifies physical row preservation, concurrent single-winner insertion, generated keys,
+unrelated unique constraints, missing native primary keys, trigger ignore, and other-table trigger key failures.
+
 `UpsertMany` emits one bounded multi-statement SQLite command inside one transaction and consumes each `RETURNING`
 result in input order, including provider-generated identities. Oversized batches or parameter sets reject before
 dispatch. `DeleteMany` uses one predicate command. The Entity batch surface uses one transaction and reports a
@@ -81,6 +94,8 @@ Connection and provenance output are redacted.
 
 ## Limits
 
+- Atomic insertion requires an assigned non-default identity or a mapped Generated identity; a default
+  non-generated key rejects before dispatch.
 - Repository operations are buffered; Entity streaming is coordinated as bounded numbered pages.
 - Offset paging is not snapshot isolation or a resumable cursor.
 - Explicit mapped containers do not combine with ambient partitions or managed row fields.

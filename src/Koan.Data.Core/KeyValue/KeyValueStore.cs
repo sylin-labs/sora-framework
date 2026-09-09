@@ -371,7 +371,7 @@ public abstract class KeyValueStore<TEntity, TKey> :
 
     /// <summary>Snapshot the values to stamp onto this write — the guarded isolation values merged with the unguarded
     /// operation overrides (<c>ManagedFieldWriteScope.Effective</c>). <c>null</c> off any scope (the byte-identical path).</summary>
-    private static IReadOnlyDictionary<string, object?>? SnapshotManaged()
+    protected static IReadOnlyDictionary<string, object?>? SnapshotManaged()
     {
         var eff = ManagedFieldWriteScope.Effective;
         if (eff is null || eff.Count == 0) return null;

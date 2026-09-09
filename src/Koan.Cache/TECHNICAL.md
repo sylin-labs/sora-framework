@@ -2,6 +2,10 @@
 
 ## Ownership
 
+The repository decorator forwards `IInsertOnlyRepository.Insert` only with native capability support.
+It invalidates a verified committed key and never seeds a value from the raw insert receipt. The outer
+Data facade retains source policy, lifecycle, identity validation and transformation ownership.
+
 Cache owns policy materialization, Entity cache identity, L1/L2 topology, serialization,
 singleflight, tag operations, and peer-invalidation meaning. Data invokes an ordered repository
 decorator but does not know Cache policy or transport. Communication owns carriage, election, wire,

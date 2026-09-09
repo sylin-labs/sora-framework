@@ -130,3 +130,15 @@ Every invoked model hook's `ShortCircuit` result is honored. A pre-save, pre-del
 prevents persistence, including dry runs and batch pre-save validation. An after-fetch stop precedes
 relationship expansion. Post-write stops control the response without undoing the committed mutation;
 the mutation is audited before response hooks run.
+## Constrained creation and visibility
+
+EntityEndpointService retains the visible before read for authorization and delta projection. A null
+does not prove physical absence: constrained creates call IInsertOnlyRepository on the Data facade
+resolved inside the requested set. Native collision returns 404 without success audit or AfterSave.
+Create-containing constrained bulk requests reject before any persistence until a native atomic mixed
+contract exists. The correction is shared by REST and MCP. No unfiltered prior-row read is introduced.
+
+Mutation qualification uses the existing Create/Update AccessFilter predicates and HasStamps. A
+read-only access realization leaves writes unchanged. The insertion selector does not reevaluate gates
+or reinterpret the principal; existing coarse authorization, including server grants, remains authoritative.
+Owner-gate-only row enforcement is outside this insertion correction. No opt-out or policy registry exists.

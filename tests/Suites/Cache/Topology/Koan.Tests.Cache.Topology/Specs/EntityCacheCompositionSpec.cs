@@ -2,6 +2,8 @@ using Koan.Cache.Abstractions.Policies;
 using Koan.Core;
 using Koan.Core.Diagnostics;
 using Koan.Data.Core.Model;
+using Koan.Data.Core;
+using Koan.Data.Abstractions;
 using Koan.Testing.Integration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -9,6 +11,25 @@ namespace Koan.Tests.Cache.Topology.Specs;
 
 public sealed class EntityCacheCompositionSpec
 {
+    [Fact]
+    public async Task Insert_is_forwarded_and_conflict_preserves_the_cached_original()
+    {
+        await using var host = await KoanIntegrationHost.Configure()
+            .ConfigureServices(services => services.AddKoan()).StartAsync(TestContext.Current.CancellationToken);
+        using var route = EntityContext.With(adapter: "inmemory", partition: Guid.NewGuid().ToString("N"));
+        var repository = host.Services.GetRequiredService<IDataService>().GetRepository<InsertedCacheEntity, string>();
+        var inserts = (IInsertOnlyRepository<InsertedCacheEntity, string>)repository;
+        var first = await inserts.Insert(new InsertedCacheEntity { Value = "original" });
+        first.Outcome.Should().Be(MutationOutcome.Inserted);
+        (await InsertedCacheEntity.Get(first.Key))!.Value.Should().Be("original");
+        var conflict = await inserts.Insert(new InsertedCacheEntity { Id = first.Key, Value = "replacement" });
+        conflict.Outcome.Should().Be(MutationOutcome.Conflict);
+        conflict.Entity.Should().BeNull();
+        (await InsertedCacheEntity.Get(first.Key))!.Value.Should().Be("original");
+        using (EntityContext.NoCache())
+            (await InsertedCacheEntity.Get(first.Key))!.Value.Should().Be("original");
+    }
+
     [Fact]
     public async Task Startup_reports_the_effective_entity_cache_plan()
     {
@@ -36,3 +57,9 @@ public sealed class EntityCacheCompositionSpec
 
 [Cacheable]
 public sealed class ReportedCacheEntity : Entity<ReportedCacheEntity>;
+
+[Cacheable]
+public sealed class InsertedCacheEntity : Entity<InsertedCacheEntity>
+{
+    public string Value { get; set; } = "";
+}

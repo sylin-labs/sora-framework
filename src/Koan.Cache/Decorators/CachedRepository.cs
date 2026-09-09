@@ -11,6 +11,7 @@ using Koan.Cache.Stores;
 using Koan.Core.Capabilities;
 using Koan.Data.Abstractions;
 using Koan.Data.Abstractions.Capabilities;
+using Koan.Data.Abstractions.Failures;
 using Koan.Data.Abstractions.Filtering;
 using Koan.Data.Abstractions.Instructions;
 using Koan.Data.Core;
@@ -21,6 +22,7 @@ namespace Koan.Cache.Decorators;
 
 internal sealed class CachedRepository<TEntity, TKey> :
     IDataRepository<TEntity, TKey>,
+    IInsertOnlyRepository<TEntity, TKey>,
     IQueryRepository<TEntity, TKey>,
     IRawQueryRepository<TEntity, TKey>,
     IDescribesCapabilities,
@@ -183,6 +185,24 @@ internal sealed class CachedRepository<TEntity, TKey> :
         }
 
         return _rawQuery.CountRaw(query, parameters, ct);
+    }
+
+    public async Task<MutationResult<TEntity, TKey>> Insert(TEntity model, CancellationToken ct = default)
+    {
+        if (_inner is not IInsertOnlyRepository<TEntity, TKey> inserts ||
+            !DataCaps.Describe(_inner, _inner.GetType().Name).Has(DataCaps.Write.InsertOnly))
+            throw new NotSupportedException($"The adapter backing {_entityName} does not support atomic insertion.");
+        var submittedKey = model.Id;
+        var result = await inserts.Insert(model, ct);
+        // Invalidate only a proven successful identity. Do not seed cached values from a provider
+        // receipt before the outer Data facade has accepted it or expose a conflicting stored row.
+        if (result.Outcome == MutationOutcome.Inserted && result.CommitOutcome == DataCommitOutcome.Committed &&
+            result.Entity is not null && EqualityComparer<TKey>.Default.Equals(result.Key, model.Id) &&
+            EqualityComparer<TKey>.Default.Equals(result.Entity.Id, result.Key) &&
+            (IsDefaultKey(submittedKey) || EqualityComparer<TKey>.Default.Equals(submittedKey, result.Key)) &&
+            !IsDefaultKey(result.Key))
+            await Remove(result.Key, ct);
+        return result;
     }
 
     public async Task<TEntity> Upsert(TEntity model, CancellationToken ct = default)

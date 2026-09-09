@@ -26,7 +26,8 @@ public sealed class EntityLifecycleContext<TEntity> where TEntity : class
 
     public TEntity Current { get; internal set; }
     public EntityLifecycleOperation Operation { get; }
-    /// <summary>The persisted value captured before this operation began, or null for a new entity.</summary>
+    /// <summary>The visible persisted value captured before this operation, or null for an insert-only
+    /// attempt or a missing visible row. Null is not proof that the physical identity is absent.</summary>
     public TEntity? Prior { get; }
     public CancellationToken CancellationToken { get; }
     public IDictionary<string, object?> Items => _items;

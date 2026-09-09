@@ -47,6 +47,8 @@ public static class DataCaps
         public static readonly Capability AtomicBatch = new("write.atomicBatch");
         /// <summary>Provider returns an exact insert/update result from its native upsert boundary.</summary>
         public static readonly Capability MutationOutcomes = new("write.mutationOutcomes");
+        /// <summary>Provider atomically inserts an absent identity without replacing an existing row.</summary>
+        public static readonly Capability InsertOnly = new("write.insertOnly");
         /// <summary>Provider supports a fast (unsafe-for-hooks) remove path.</summary>
         public static readonly Capability FastRemove = new("write.fastRemove");
         /// <summary>Provider supports an atomic conditional replace (compare-and-set by Id) — see

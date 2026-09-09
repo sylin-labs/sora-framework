@@ -243,7 +243,7 @@ public sealed class DataService : IDataService
 
     private IDataRepository<TVariant, TKey> CreateVariantRepositoryCore<TRoot, TVariant, TKey>()
         where TRoot : class, IEntity<TKey>
-        where TVariant : TRoot, IEntity<TKey>
+        where TVariant : class, TRoot, IEntity<TKey>
         where TKey : notnull
     {
         EntityTypeCatalog.Register(typeof(TVariant));

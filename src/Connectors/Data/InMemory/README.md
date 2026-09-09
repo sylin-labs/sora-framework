@@ -89,3 +89,10 @@ contract.
 
 - [DATA-0107 provider-bounded Entity streams](../../../../docs/decisions/DATA-0107-provider-bounded-entity-streams.md)
 - [Entity access and streaming](../../../../docs/guides/data/entity-access-and-streaming.md)
+
+## Atomic insertion
+
+Atomic insertion uses the existing host-owned, source/root/partition store. `ConcurrentDictionary.TryAdd`
+provides the insert-only decision over detached snapshots; an identity collision never replaces or
+returns the existing row. This is a single-process guarantee, consistent with InMemory storage.
+Default numeric keys reject before persistence; assign an identity when the Entity cannot generate one.

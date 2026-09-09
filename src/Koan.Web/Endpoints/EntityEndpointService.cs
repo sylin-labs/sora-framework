@@ -140,6 +140,19 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         return filter;
     }
 
+    // Read visibility is independent of mutation authority. Inspect actual mutation declarations,
+    // not the presence of an access realization, and reuse the request-bound accumulators.
+    private (AccessFilter<TEntity>? Create, AccessFilter<TEntity>? Update) MutationConstraints(EntityRequestContext context)
+    {
+        var accessor = ResolveAccessor(context);
+        if (accessor is null) return (null, null);
+        var create = ConstrainFor(accessor, AccessAction.Create);
+        var update = ConstrainFor(accessor, AccessAction.Update);
+        return create.HasStamps || create.Predicates.Count != 0 || update.HasStamps || update.Predicates.Count != 0
+            ? (create, update)
+            : (null, null);
+    }
+
     // SEC-0004 (§C): does the COARSE seam allow this verb at all (respecting every IAuthorize provider)? The outer
     // guard of the per-row projection — the row-bound gate + Constrain then refine it. Gate() is memoized per verb.
     private async Task<bool> CoarseAllows(EntityRequestContext context, string action)
@@ -495,12 +508,11 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         var context = request.Context;
         if (await Gate(context, EntityAuthorizeActions.Write).ConfigureAwait(false) is { } denied) return ModelDenied(context, denied);
         await AnnotateAccess(context).ConfigureAwait(false);
+        using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
         var repo = _dataService.GetRepository<TEntity, TKey>();
         context.Capabilities = Capabilities(repo);
 
         var hookContext = _hookPipeline.CreateContext(context);
-
-        using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
 
         // WEB-0073: route-id authority. A verb that pins the id to the route (PUT) delivers it via
         // RouteId; the model carries it before the create-vs-update split so replace-by-id cannot
@@ -519,9 +531,9 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         // AN11 delta + SEC-0004 Constrain both need the pre-mutation row. Read it ONCE when either asks (MCP and
         // dry-run always want the delta; a constrained entity always needs the create-vs-update split). A plain,
         // unconstrained REST upsert stays a single write with no extra read.
-        var accessor = ResolveAccessor(context);
+        var mutation = MutationConstraints(context);
         TEntity? before = null;
-        if (WantsDelta(context, request.DryRun) || accessor is not null)
+        if (WantsDelta(context, request.DryRun) || mutation.Create is not null)
         {
             var id = request.Model.Id;
             if (id is not null && !EqualityComparer<TKey>.Default.Equals(id, default!))
@@ -534,7 +546,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             context.Items[EntityMutationProbe.BeforeKey] = before;
             context.Items[EntityMutationProbe.OperationKey] = before is null ? "create" : "update";
         }
-        if (accessor is not null)
+        if (mutation.Create is not null)
         {
             // create (no existing row) → STAMP the owner onto the payload — server-truth that overwrites a forged
             // owner (a Where on create is a silent no-op that lets it through). update → the existing row must be
@@ -542,11 +554,11 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             // (freeze ownership by default).
             if (before is null)
             {
-                ConstrainFor(accessor, AccessAction.Create).ApplyStamps(request.Model);
+                mutation.Create.ApplyStamps(request.Model);
             }
             else
             {
-                var constrain = ConstrainFor(accessor, AccessAction.Update);
+                var constrain = mutation.Update!;
                 if (!PassesRequestPredicates(before, constrain.Predicates))
                 {
                     return new EntityModelResult<TEntity>(context, null, null, new NotFoundResult());
@@ -554,6 +566,11 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
                 constrain.ApplyStamps(request.Model);
             }
         }
+
+        var requiresInsert = mutation.Create is not null && before is null;
+        if (requiresInsert && (repo is not IInsertOnlyRepository<TEntity, TKey> ||
+            !DataCaps.Describe(repo, repo.GetType().Name).Has(DataCaps.Write.InsertOnly)))
+            return new EntityModelResult<TEntity>(context, null, null, InsertUnsupported());
 
         if (!await _hookPipeline.BeforeSave(hookContext, request.Model))
             return ModelShortCircuit(context, hookContext);
@@ -568,7 +585,15 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             return new EntityModelResult<TEntity>(context, request.Model, request.Model);
         }
 
-        var saved = await request.Model.Upsert<TEntity, TKey>(context.CancellationToken);
+        TEntity saved;
+        if (requiresInsert)
+        {
+            var inserted = await ((IInsertOnlyRepository<TEntity, TKey>)repo).Insert(request.Model, context.CancellationToken);
+            if (inserted.Outcome == MutationOutcome.Conflict)
+                return new EntityModelResult<TEntity>(context, null, null, new NotFoundResult());
+            saved = inserted.Entity!;
+        }
+        else saved = await request.Model.Upsert<TEntity, TKey>(context.CancellationToken);
         await AuditMutation(context, EntityAuthorizeActions.Write, saved.Id?.ToString() ?? "").ConfigureAwait(false);
 
         if (!await _hookPipeline.AfterSave(hookContext, saved))
@@ -605,11 +630,12 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         // One partition scope spans the constraint probe, BeforeSave hooks, and the write (mirrors single-item Upsert).
         using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
 
-        var accessor = ResolveAccessor(context);
-        if (accessor is not null)
+        var mutation = MutationConstraints(context);
+        if (mutation.Create is not null)
         {
-            // SEC-0004: per-item create-stamp / update-verify. ATOMIC — if any update target is out of scope the
-            // WHOLE batch is rejected (404), never a silent partial drop.
+            // Preflight the entire request. A null visible read does not prove absence; mixed
+            // atomic insertion/update is not yet a provider contract, so such batches fail closed.
+            var containsCreate = false;
             foreach (var model in list)
             {
                 var id = model.Id;
@@ -618,11 +644,12 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
                     : null;
                 if (before is null)
                 {
-                    ConstrainFor(accessor, AccessAction.Create).ApplyStamps(model);
+                    containsCreate = true;
+                    mutation.Create.ApplyStamps(model);
                 }
                 else
                 {
-                    var constrain = ConstrainFor(accessor, AccessAction.Update);
+                    var constrain = mutation.Update!;
                     if (!PassesRequestPredicates(before, constrain.Predicates))
                     {
                         return new EntityEndpointResult(context, null, new NotFoundResult());
@@ -630,6 +657,12 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
                     constrain.ApplyStamps(model);
                 }
             }
+            if (containsCreate)
+                return new EntityEndpointResult(context, null, new ObjectResult(new
+                {
+                    code = KoanWebConstants.Codes.Mutation.BulkCreateUnsupported,
+                    message = "Constrained bulk requests containing new or unavailable identities require atomic mixed writes. Submit creates individually."
+                }) { StatusCode = StatusCodes.Status501NotImplemented });
         }
 
         foreach (var model in list)
@@ -977,6 +1010,12 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         }
         return true;
     }
+
+    private static ObjectResult InsertUnsupported() => new(new
+    {
+        code = KoanWebConstants.Codes.Mutation.InsertUnsupported,
+        message = "This connector or identity shape cannot guarantee atomic insertion. Select a connector and identity shape that support insert-only writes."
+    }) { StatusCode = StatusCodes.Status501NotImplemented };
 
     // AN11: a caller wants a state delta when it explicitly opts in (MCP sets WantsDeltaKey) or whenever the
     // mutation is a dry-run (the rehearsal's whole point is the prospective delta).

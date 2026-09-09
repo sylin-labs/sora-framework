@@ -118,3 +118,6 @@ settlement, or automatic stale-value revalidation. Peer invalidation is a bounde
 part of the correctness posture.
 
 See the [Cache reference](../../docs/reference/data/cache.md) and [technical notes](TECHNICAL.md).
+Atomic insertion is forwarded through the existing Entity repository decorator when the selected
+provider supports `DataCaps.Write.InsertOnly`. Proven committed insertion invalidates its cache key;
+conflict does not cache or expose the rejected payload or an existing row.

@@ -80,3 +80,8 @@ one camelCase JSON contract while protocol envelopes retain their specification-
 The retired `Koan:Mcp:EnableHttpSseTransport` key fails options validation at startup. Remove it and
 configure `EnableStreamableHttpTransport`. To retain clients using `/mcp/sse` and `/mcp/rpc`, also set
 `EnableLegacySseTransport` explicitly. No transport is enabled implicitly from the retired key.
+## Rejected mutation deltas
+
+MutationDeltaProjector returns no delta for a short-circuited endpoint result, even if a before-state
+probe or operation label was prepared. This prevents rejected insert collisions from appearing as
+committed creates. Dry-run remains prospective and uses only the existing visible before state.
