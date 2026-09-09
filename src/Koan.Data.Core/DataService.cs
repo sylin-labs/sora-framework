@@ -131,7 +131,9 @@ public sealed class DataService : IDataService
             fieldTransforms,
             sourcePlan,
             _sp.GetRequiredService<DataOperationHorizon>(),
-            binding);
+            binding,
+            () => AdapterResolver.ResolveDecisionForEntity<TEntity>(
+                _sp, _sp.GetRequiredService<DataSourceRegistry>()).Binding);
 
         // Repository construction is the activation boundary: inspection and route description remain pure, while
         // any runtime path that actually asks for a repository makes that provider/source visible to readiness.

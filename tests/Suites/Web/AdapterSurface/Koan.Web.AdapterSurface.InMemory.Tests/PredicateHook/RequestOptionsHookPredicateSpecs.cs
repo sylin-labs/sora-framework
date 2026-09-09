@@ -9,7 +9,7 @@ using Xunit;
 namespace Koan.Web.AdapterSurface.InMemory.Tests.PredicateHook;
 
 /// <summary>
-/// WEB-0068 — end-to-end coverage of <c>QueryOptions.Predicates</c> contributed via
+/// WEB-0068 — end-to-end coverage of <c>QueryOptions.Filter</c> contributed via
 /// <c>IRequestOptionsHook&lt;VisibilityWidget&gt;</c>. The hook narrows the result set by role
 /// + owner; tests prove the composition AND-chains with the user's <c>?filter=</c> and that
 /// pagination headers reflect the post-predicate population.

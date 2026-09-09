@@ -108,3 +108,10 @@ Queries use the same spelling. Ordinary enum ordering uses declared ordinal rank
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
 Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+### Same-identity counterpart predicates
+
+`Filter.SameIdIn<TEntity>(predicate, partition)` requires a matching same-ID Entity in that
+partition. Null inherits and empty selects the default partition. `QueryDefinition` carries
+the predicate; only a connector declaring native counterpart support may execute it. The
+complete predicate must be native, including both operands' Data scopes. No CLR fallback,
+mutable filter constants, or counterpart mutation guarantee is implied.

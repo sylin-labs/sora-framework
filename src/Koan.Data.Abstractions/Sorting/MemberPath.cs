@@ -39,17 +39,18 @@ public sealed record MemberPath
         int collectionSegmentIndex)
     {
         RootType = rootType ?? throw new ArgumentNullException(nameof(rootType));
-        Members = members ?? throw new ArgumentNullException(nameof(members));
-        if (members.Count == 0) throw new ArgumentException("MemberPath must have at least one segment.", nameof(members));
+        ArgumentNullException.ThrowIfNull(members);
+        Members = Array.AsReadOnly(members.ToArray());
+        if (Members.Count == 0) throw new ArgumentException("MemberPath must have at least one segment.", nameof(members));
         ValueType = valueType ?? throw new ArgumentNullException(nameof(valueType));
         TraversesCollection = traversesCollection;
         CollectionSegmentIndex = collectionSegmentIndex;
 
         var sb = new StringBuilder();
-        for (var i = 0; i < members.Count; i++)
+        for (var i = 0; i < Members.Count; i++)
         {
             if (i > 0) sb.Append('.');
-            sb.Append(members[i].Name);
+            sb.Append(Members[i].Name);
         }
         DotPath = sb.ToString();
     }

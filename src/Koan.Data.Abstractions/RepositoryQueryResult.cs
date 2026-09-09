@@ -12,6 +12,11 @@ namespace Koan.Data.Abstractions;
 /// </summary>
 public sealed class RepositoryQueryResult<TEntity>
 {
+    /// <summary>Data-owned evidence attached after native counterpart execution.</summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    [System.Text.Json.Serialization.JsonIgnore]
+    [System.Runtime.Serialization.IgnoreDataMember]
+    public IQueryReadEvidence? ReadEvidence { get; set; }
     public static readonly IReadOnlySet<SortSpec> NoSortHandled = FrozenSet<SortSpec>.Empty;
 
     /// <summary>Items returned by the adapter, in the order it intends (sorted iff it pushed sort down).</summary>

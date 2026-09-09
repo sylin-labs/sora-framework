@@ -75,6 +75,7 @@ internal sealed class RelationshipQueryExecutor(IServiceProvider services, IData
         var (adapterQuery, residual) = FilterPushdownCoordinator.Plan(query, filterSupport, typeof(TChild));
 
         IReadOnlyList<TChild> items;
+        IQueryReadEvidence? readEvidence = null;
         RelationshipExecutionMode mode;
         int? candidatesExamined = null;
 
@@ -94,6 +95,7 @@ internal sealed class RelationshipQueryExecutor(IServiceProvider services, IData
                     .QueryCandidates(repo, queryRepo, adapterQuery, ct)
                     .ConfigureAwait(false);
                 items = FilterPushdownCoordinator.Finalize(query, adapterQuery, residual, native).Page;
+                readEvidence = native.ReadEvidence;
                 break;
 
             case FilterExecutionKind.InMemory:
@@ -169,6 +171,7 @@ internal sealed class RelationshipQueryExecutor(IServiceProvider services, IData
                 $"Narrow the relationship or raise its explicit result limit above {resultLimit}.", resultLimit);
 
         await DataQueryExecution<TChild, TKey>.MaterializeVisible(repo, items, ct).ConfigureAwait(false);
+        DataQueryExecution<TChild, TKey>.ValidateEvidence(readEvidence, items);
 
         var buckets = ids.ToDictionary(id => id, _ => new List<TChild>());
         foreach (var item in items)
@@ -194,7 +197,7 @@ internal sealed class RelationshipQueryExecutor(IServiceProvider services, IData
         return new RelationshipQueryResult<TChild, TKey>(
             grouped,
             new RelationshipExecutionDecision(mode, provider, ids.Length, items.Count, candidatesExamined,
-                policy.MaxFallbackCandidates));
+                policy.MaxFallbackCandidates)) { ReadEvidence = readEvidence };
     }
 
     private RelationshipQueryRejectedException Reject<TChild, TKey>(

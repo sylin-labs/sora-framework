@@ -7,4 +7,10 @@ public sealed record RelationshipQueryResult<TEntity, TKey>(
     IReadOnlyDictionary<TKey, IReadOnlyList<TEntity>> ByParent,
     RelationshipExecutionDecision Decision)
     where TEntity : class, IEntity<TKey>
-    where TKey : notnull;
+    where TKey : notnull
+{
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    [System.Text.Json.Serialization.JsonIgnore]
+    [System.Runtime.Serialization.IgnoreDataMember]
+    public IQueryReadEvidence? ReadEvidence { get; init; }
+}

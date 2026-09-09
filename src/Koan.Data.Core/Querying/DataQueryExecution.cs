@@ -11,6 +11,12 @@ internal static class DataQueryExecution<TEntity, TKey>
     where TEntity : class, IEntity<TKey>
     where TKey : notnull
 {
+    public static void ValidateEvidence(IQueryReadEvidence? evidence, IEnumerable<TEntity> rows)
+    {
+        if (evidence is not null && (!evidence.CoversRows(rows.Cast<object>()) || !evidence.IsCurrentScope()))
+            throw new InvalidOperationException("Counterpart read evidence no longer covers the returned identities or Data scope. Keep load projections within the selected rows and scope.");
+    }
+
     public static Task<RepositoryQueryResult<TEntity>> QueryCandidates(
         IDataRepository<TEntity, TKey> repository,
         IQueryRepository<TEntity, TKey> queryRepository,

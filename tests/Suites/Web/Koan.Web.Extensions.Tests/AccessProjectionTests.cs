@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq.Expressions;
+using Koan.Data.Abstractions.Filtering;
 using System.Security.Claims;
 using AwesomeAssertions;
 using Koan.Web.Authorization;
@@ -28,8 +28,7 @@ public sealed class AccessProjectionTests
     private static ClaimsPrincipal User(params Claim[] claims) => new(new ClaimsIdentity(claims, "Test"));
     private static ClaimsPrincipal Anonymous() => new(new ClaimsIdentity());
 
-    private static readonly IReadOnlyList<Expression<Func<Doc, bool>>> NoPredicates =
-        Array.Empty<Expression<Func<Doc, bool>>>();
+    private static readonly Filter? NoFilter = null;
 
     private static AccessGate Gate(
         IDictionary<string, ActionGate>? byAction = null,
@@ -42,7 +41,7 @@ public sealed class AccessProjectionTests
     public void Open_gate_with_no_constrain_advertises_every_verb()
     {
         var proj = new RowProjection<Doc>(AccessGate.Open, User(), true, true, true,
-            owner: null, authenticatedFallback: true, NoPredicates, NoPredicates, NoPredicates);
+            owner: null, authenticatedFallback: true, NoFilter, NoFilter, NoFilter);
 
         proj.Can(AlicesDoc).Should().Equal("read", "write", "remove");
     }
@@ -52,7 +51,7 @@ public sealed class AccessProjectionTests
     {
         // The seam denied write coarsely (e.g. an external provider / a closed gate) — the row cannot resurrect it.
         var proj = new RowProjection<Doc>(AccessGate.Open, User(), coarseRead: true, coarseWrite: false, coarseRemove: true,
-            owner: null, authenticatedFallback: true, NoPredicates, NoPredicates, NoPredicates);
+            owner: null, authenticatedFallback: true, NoFilter, NoFilter, NoFilter);
 
         proj.Can(AlicesDoc).Should().Equal("read", "remove");
     }
@@ -61,9 +60,9 @@ public sealed class AccessProjectionTests
     public void A_constrain_predicate_narrows_a_verb_to_the_rows_that_satisfy_it()
     {
         // write is constrained to alice's rows (the Update Where(Owner)); read/remove stay open.
-        IReadOnlyList<Expression<Func<Doc, bool>>> ownAlice = new Expression<Func<Doc, bool>>[] { d => d.OwnerId == "alice" };
+        var ownAlice = LinqFilterCompiler.Compile<Doc>(d => d.OwnerId == "alice");
         var proj = new RowProjection<Doc>(AccessGate.Open, User(), true, true, true,
-            owner: null, authenticatedFallback: true, NoPredicates, ownAlice, NoPredicates);
+            owner: null, authenticatedFallback: true, NoFilter, ownAlice, NoFilter);
 
         proj.Can(AlicesDoc).Should().Contain("write");
         proj.Can(BobsDoc).Should().NotContain("write", "bob's row fails the write Constrain");
@@ -78,7 +77,7 @@ public sealed class AccessProjectionTests
         var gate = Gate(byAction: new Dictionary<string, ActionGate> { ["write"] = Koan.Web.Authorization.Gate.Owner });
         Func<Doc, bool> ownerIsAlice = d => d.OwnerId == "alice";
         var proj = new RowProjection<Doc>(gate, User(new Claim(ClaimTypes.NameIdentifier, "alice")), true, true, true,
-            owner: ownerIsAlice, authenticatedFallback: true, NoPredicates, NoPredicates, NoPredicates);
+            owner: ownerIsAlice, authenticatedFallback: true, NoFilter, NoFilter, NoFilter);
 
         proj.Can(AlicesDoc).Should().Contain("write", "the row is owned → the owner gate term is satisfied");
         proj.Can(BobsDoc).Should().NotContain("write", "the row is not owned → the owner gate term fails");
@@ -93,11 +92,11 @@ public sealed class AccessProjectionTests
         var gate = Gate(byAction: new Dictionary<string, ActionGate> { ["write"] = Koan.Web.Authorization.Gate.Owner });
 
         var authed = new RowProjection<Doc>(gate, User(), true, true, true,
-            owner: null, authenticatedFallback: true, NoPredicates, NoPredicates, NoPredicates);
+            owner: null, authenticatedFallback: true, NoFilter, NoFilter, NoFilter);
         authed.Can(AlicesDoc).Should().Contain("write");
 
         var anon = new RowProjection<Doc>(gate, Anonymous(), true, true, true,
-            owner: null, authenticatedFallback: false, NoPredicates, NoPredicates, NoPredicates);
+            owner: null, authenticatedFallback: false, NoFilter, NoFilter, NoFilter);
         anon.Can(AlicesDoc).Should().NotContain("write", "no owner predicate + anonymous → the owner term cannot pass");
     }
 
@@ -108,11 +107,11 @@ public sealed class AccessProjectionTests
         var gate = Gate(custom: new Dictionary<string, ActionGate> { ["fulfill"] = Koan.Web.Authorization.Gate.Is("admin") });
 
         var admin = new RowProjection<Doc>(gate, User(new Claim(ClaimTypes.Role, "admin")), true, true, true,
-            owner: null, authenticatedFallback: true, NoPredicates, NoPredicates, NoPredicates);
+            owner: null, authenticatedFallback: true, NoFilter, NoFilter, NoFilter);
         admin.Can(AlicesDoc).Should().Equal("read", "write", "remove", "fulfill");
 
         var nonAdmin = new RowProjection<Doc>(gate, User(new Claim(ClaimTypes.Role, "clerk")), true, true, true,
-            owner: null, authenticatedFallback: true, NoPredicates, NoPredicates, NoPredicates);
+            owner: null, authenticatedFallback: true, NoFilter, NoFilter, NoFilter);
         nonAdmin.Can(AlicesDoc).Should().Equal("read", "write", "remove");
     }
 
@@ -122,7 +121,7 @@ public sealed class AccessProjectionTests
         var gate = Gate(custom: new Dictionary<string, ActionGate> { ["sign"] = Koan.Web.Authorization.Gate.Owner });
         Func<Doc, bool> ownerIsAlice = d => d.OwnerId == "alice";
         var proj = new RowProjection<Doc>(gate, User(new Claim(ClaimTypes.NameIdentifier, "alice")), true, true, true,
-            owner: ownerIsAlice, authenticatedFallback: true, NoPredicates, NoPredicates, NoPredicates);
+            owner: ownerIsAlice, authenticatedFallback: true, NoFilter, NoFilter, NoFilter);
 
         proj.Can(AlicesDoc).Should().Contain("sign");
         proj.Can(BobsDoc).Should().NotContain("sign");

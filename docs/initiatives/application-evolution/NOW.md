@@ -4,7 +4,7 @@ domain: framework
 title: "Application evolution handoff"
 audience: [maintainers, ai-agents]
 status: current
-last_updated: 2026-09-05
+last_updated: 2026-09-09
 framework_version: v1.0.0
 validation:
   status: reviewed
@@ -16,7 +16,18 @@ validation:
 Read the [charter](README.md) and [live ledger](PROGRESS.md), then
 [published-package evidence](evidence/AE-01a.md). The ledger is authoritative if this handoff ages.
 
-## Next implementation session
+## Current corrective slice
+
+Resume [AE-08 counterpart query authority](work-items/08-counterpart-query-authority.md) on the
+existing working tree and coordinate its Data/provider/Web build ownership before running tests.
+The accepted implementation has 220 passing focused checks and independent source acceptance.
+Mechanical composer cleanup, native insertion compatibility and repository coherence are complete.
+Follow normal publication and public-package consumer validation.
+AE-07 insertion and AE-09 build-dependency corrections are committed locally; publication and
+public-package brownfield acceptance remain separate. Do not replace this work with a new ledger
+or start AE-02 while AE-08 implementation is unsettled.
+
+## After the current corrective slice
 
 1. Check the working tree and owners, then claim [AE-02](work-items/02-application-evolution.md).
    AE-01 and AE-01a are complete; do not rebuild their applications elsewhere or rerun discovery.

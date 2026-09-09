@@ -117,7 +117,38 @@ expansion no adapter can serve fails closed with `422`; a response past the safe
   carries stable reason, relationship, provider, correction, and limit fields; no entity keys or
   provider configuration are included.
 - MCP uses `IEntityEndpointService` and therefore receives the same authorization, limits, errors, and
-  runtime facts. These are direct-edge guarantees, not recursive graph-depth or parent-batching claims.
+  runtime facts. Parent IDs are batched per edge through a structured ID-set query. These are direct-edge
+  guarantees, not recursive graph-depth guarantees.
+
+## Normalized read constraints and counterpart authority
+
+`IAccessFilter<T>`, `AccessFilter<T>` and `QueryOptions` carry one `Filter? Filter`. The former `Predicates`
+collections are removed, which is a source and binary API change. Use `q.Where(expression)` and
+`options.AddPredicate(expression)` for ordinary lambda ergonomics, or compose the normalized `Filter`
+directly. Supported captured values and collections are copied when contributed; the endpoint freezes
+the complete query after `BuildOptions`. An opaque CLR-only predicate retains ordinary fallback semantics
+and cannot be combined with a counterpart requirement.
+
+`q.Where(expression, partition: "")` lowers immediately to `Filter.SameIdIn<T>`: the same entity and ID
+must satisfy the predicate in the explicit default partition. `null` inherits the current partition.
+Data binds both sides through its existing source, tenant and segmentation rules. The application owns
+the business predicate; Web does not open raw collections or collect an unbounded allow-list.
+
+Collection and body queries carry the complete filter before provider count, order and paging. Keyed
+reads query the ID together with the same filter before materialization. Parent expansion uses the
+bounded ID set and full related filter; child expansion uses `IRelationshipQueryExecutor`. Unsupported
+providers or relational Boolean/residual combinations fail before returning candidates. Count and page
+may be separate commands; this is not a cross-command snapshot or a promise against later moderation.
+
+The endpoint binds Data's execution evidence to the request principal, frozen options and exact returned
+object references and typed IDs. Access manifests use this read evidence rather than rerunning Read
+`Constrain` or evaluating the replica's CLR fields. Related evidence remains valid through the final graph
+boundary. Changed identities, principal, query or scope reject the response with `web.read.evidenceChanged`.
+No proof is a request-wide permission or a caller-managed token.
+
+Counterpart predicates are read-only. Create, Update, Delete and mass-mutation bounds refuse them before
+mutation hooks or writes. A read-only declaration leaves ordinary admin writes unchanged. A `/new`
+template has no persisted identity and refuses a counterpart realization before its template callback.
 
 ## Ordered response hooks
 
@@ -126,10 +157,32 @@ subsequent hooks; `Next()` preserves the current payload. `HookContext.ShortCirc
 pipeline immediately and takes precedence over a returned replacement. This applies to both collection
 and model responses through the shared REST/MCP endpoint pipeline.
 
-Every invoked model hook's `ShortCircuit` result is honored. A pre-save, pre-delete or pre-patch stop
+For ordinary row-only reads and mutations, an invoked model hook's `ShortCircuit` result is honored. A pre-save, pre-delete or pre-patch stop
 prevents persistence, including dry runs and batch pre-save validation. An after-fetch stop precedes
 relationship expansion. Post-write stops control the response without undoing the committed mutation;
 the mutation is audited before response hooks run.
+
+`EmitDecision.Project(rows, mapper)` is a terminal deferred collection decision. Its factory owns the
+typed source reference/order array, then the endpoint checks that it exactly matches the selected page.
+Mapping runs into a private array with one full evidence check before and one after the batch. Successful
+mapping invokes the delegate once per source row; exceptions discard the array. Foreign, reordered,
+subset or replaced sources are rejected, as are source ID, principal or query-scope changes. The framework
+does not infer source authority from a DTO implementing `IProjectionOf`, and does not inspect arbitrary
+object graphs or try to prove application field calculations.
+Supported source identities are string, Guid, byte, sbyte, short, ushort, int, uint, long and ulong.
+Other key types refuse before mapping rather than aliasing mutable identity values into a proof.
+Mapper exceptions are logged through the endpoint's existing logger without entity or request payloads.
+The client receives a safe 500 with `web.read.projectionFailed`; source-evidence rejection remains a
+separate 400 response, as do unsupported key or shape combinations. Neither response contains a partial view.
+
+Collection and Query support terminal projection. Model and mutation emit reject that decision before
+mapping. `QueryOptions.Shape` and `IncludeRelationships` carry the normalized response choice before
+`BuildOptions`; read evidence freezes them together with `View`. Flat/full projection cannot be combined
+with map, dict or relationship shaping. For `Next`, framework containers are constructed after custom
+emit hooks and related proofs are checked before return. Ordinary row-only `With` chains retain their
+ordered replacement behavior. A counterpart read refuses arbitrary `With` and success short-circuits;
+error object bodies from custom denials are stripped while their status remains intact. The Access floor
+still runs exactly once after user options even when an earlier options hook short-circuits.
 ## Constrained creation and visibility
 
 EntityEndpointService retains the visible before read for authorization and delta projection. A null

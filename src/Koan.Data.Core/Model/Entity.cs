@@ -144,6 +144,10 @@ namespace Koan.Data.Core.Model
             => Data<TEntity, TKey>.QueryStream(filterJson, ct);
         public static IAsyncEnumerable<TEntity> QueryStream(string filterJson, string sort, int? batchSize = null, CancellationToken ct = default)
             => Data<TEntity, TKey>.QueryStream(filterJson, sort, batchSize, ct);
+
+        /// <summary>Stream a structured query through provider-bounded pages.</summary>
+        public static IAsyncEnumerable<TEntity> QueryStream(QueryDefinition query, int? batchSize = null, CancellationToken ct = default)
+            => Data<TEntity, TKey>.QueryStream(query, batchSize, ct);
         [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]
         public static IAsyncEnumerable<TEntity> QueryStream(string filterJson, string sort, CancellationToken ct)
             => Data<TEntity, TKey>.QueryStream(filterJson, sort, ct);
@@ -299,6 +303,7 @@ namespace Koan.Data.Core.Model
 
         public static Task<bool> Remove(TKey id, QueryDefinition? options, CancellationToken ct = default)
         {
+            Koan.Data.Abstractions.Filtering.Filter.RequireRowOnly(options?.Filter, "Entity.Remove");
             if (options?.Partition is string partition && !string.IsNullOrWhiteSpace(partition))
             {
                 return Remove(id, partition, ct);
@@ -316,6 +321,7 @@ namespace Koan.Data.Core.Model
 
         public static Task<int> Remove(IEnumerable<TKey> ids, QueryDefinition? options, CancellationToken ct = default)
         {
+            Koan.Data.Abstractions.Filtering.Filter.RequireRowOnly(options?.Filter, "Entity.Remove");
             if (options?.Partition is string partition && !string.IsNullOrWhiteSpace(partition))
             {
                 return Remove(ids, partition, ct);

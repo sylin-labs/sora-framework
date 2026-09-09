@@ -139,3 +139,22 @@ Queries use the same spelling. Ordinary enum ordering uses declared ordinal rank
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
 Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+
+## Same-ID counterpart queries
+
+Ordinary managed Mongo storage supports `Filter.SameIdIn<TEntity>(predicate, partition)` in structured reads.
+The selected partition contributes eligibility; filtering, sorting, and returned content still use the outer row.
+For example, translated catalog rows can require an existing readable canonical row before count and pagination.
+Even a true counterpart predicate excludes orphaned outer rows.
+
+Data binds both operands and their scopes before Mongo receives the query. Native identity-correlated lookup
+applies the complete Boolean predicate before count, ordering, and paging. Counterpart rows are never hydrated.
+Mapped storage, nested counterpart predicates, incompatible routes/identity shapes, and residual predicates reject.
+Row-only queries retain the existing Find/CountDocuments path.
+
+Count and page use separate native commands with the same predicate plan. Concurrent changes can produce
+different committed observations between those commands; this support does not add snapshot consistency.
+
+Counterpart identity evidence is initially qualified for string, Guid, and the eight integral CLR
+key types. Mapped identities and other key types (including mutable byte[] keys) do not advertise
+SupportsSameIdIn and reject counterpart binding. Ordinary persistence support is unchanged.

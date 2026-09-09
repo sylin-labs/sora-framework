@@ -103,7 +103,7 @@ public abstract class EntityAccess<TEntity> : IEntityAccessRealization
     {
         var filter = new AccessFilter<TEntity>();
         Constrain(filter, AccessAction.Create);
-        return filter.Predicates.Count > 0 && !filter.HasStamps;
+        return filter.Filter is not null && !filter.HasStamps;
     }
 
     /// <summary>Bind the per-request principal/services before Owner/Constrain run (called by the endpoint/hook).</summary>

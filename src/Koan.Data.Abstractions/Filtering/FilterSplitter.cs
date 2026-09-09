@@ -25,6 +25,14 @@ public static class FilterSplitter
     {
         switch (filter)
         {
+            case SameIdInFilter same:
+                return caps.SupportsSameIdIn && same.EntityType == entityType && !Filter.HasCounterpart(same.Predicate)
+                    && Split(same.Predicate, caps, entityType).Residual is null
+                    ? new FilterSplit(filter, null) : new FilterSplit(null, filter);
+            case BoundSameIdInFilter bound:
+                return caps.SupportsSameIdIn && bound.Target.EntityType == entityType && !Filter.HasCounterpart(bound.Predicate)
+                    && Split(bound.Predicate, caps, entityType).Residual is null
+                    ? new FilterSplit(filter, null) : new FilterSplit(null, filter);
             case AllOf all:
             {
                 if (all.Operands.Count == 0) return new FilterSplit(filter, null); // match-all, trivially pushable

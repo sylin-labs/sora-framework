@@ -2,6 +2,7 @@ using Koan.Core;
 using Koan.Data.Abstractions.Annotations;
 using Koan.Data.Abstractions.Capabilities;
 using Koan.Data.Abstractions.Failures;
+using Koan.Data.Abstractions.Filtering;
 using Koan.Testing.Integration;
 using Microsoft.Extensions.DependencyInjection;
 using MongoDB.Bson;
@@ -101,6 +102,11 @@ public sealed class MongoInsertOnlySpec(MongoFixture fixture, ITestOutputHelper 
             .StartAsync(TestContext.Current.CancellationToken);
         var repository = host.Services.GetRequiredService<IDataService>().GetRepository<MappedProbe, long>();
         DataCaps.Describe(repository, "mongo").Has(DataCaps.Write.InsertOnly).Should().BeFalse();
+        DataCaps.Describe(repository, "mongo").Detail<FilterSupport>(DataCaps.Query.Filter)!
+            .SupportsSameIdIn.Should().BeFalse();
+        var native = new MongoAdapterFactory().Create<MappedProbe, long>(host.Services);
+        FluentActions.Invoking(() => ((ICounterpartQueryRepository)native).BindCounterpartTarget())
+            .Should().Throw<NotSupportedException>();
         var insert = (IInsertOnlyRepository<MappedProbe, long>)repository;
         await FluentActions.Invoking(() => insert.Insert(new MappedProbe { Id = 7, Value = "replacement" }))
             .Should().ThrowAsync<NotSupportedException>();

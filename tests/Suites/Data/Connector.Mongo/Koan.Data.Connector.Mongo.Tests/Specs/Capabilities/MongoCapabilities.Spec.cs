@@ -29,6 +29,7 @@ public sealed class MongoCapabilitiesSpec(MongoFixture fixture, ITestOutputHelpe
         // Mongo lowers collection-element substring natively ($elemMatch + $regex) and says so.
         var filterSupport = caps.Detail<FilterSupport>(DataCaps.Query.Filter) ?? FilterSupport.None;
         filterSupport.CollectionOperators.Should().Contain(FilterOperator.HasContains);
+        filterSupport.SupportsSameIdIn.Should().BeTrue();
 
         var partition = NewPartition();
         using var lease = Lease(partition);

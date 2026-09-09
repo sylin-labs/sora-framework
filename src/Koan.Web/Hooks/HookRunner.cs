@@ -1,9 +1,11 @@
+using Koan.Web.Authorization;
+
 namespace Koan.Web.Hooks;
 
 /// <summary>
 /// Orchestrates hook invocation in deterministic order and handles short-circuiting.
 /// </summary>
-internal sealed class HookRunner<TEntity>
+internal sealed class HookRunner<TEntity> where TEntity : class
 {
     private readonly IEnumerable<IRequestOptionsHook<TEntity>> _opts;
     private readonly IEnumerable<ICollectionHook<TEntity>> _col;
@@ -28,10 +30,15 @@ internal sealed class HookRunner<TEntity>
     {
         foreach (var h in _opts)
         {
+            if (h is EntityAccessConstrainHook<TEntity>) continue;
             await h.OnBuildingOptions(ctx, opts);
-            if (ctx.IsShortCircuited) return false;
+            if (ctx.IsShortCircuited) break;
         }
-        return true;
+        // The access floor also governs a hook's attempted success fallback. It is contributed
+        // exactly once, after user options, even when those options short-circuit execution.
+        foreach (var access in _opts.OfType<EntityAccessConstrainHook<TEntity>>())
+            await access.OnBuildingOptions(ctx, opts);
+        return !ctx.IsShortCircuited;
     }
 
     public async Task<bool> BeforeCollection(HookContext<TEntity> ctx, QueryOptions opts)
@@ -144,6 +151,7 @@ internal sealed class HookRunner<TEntity>
         {
             var decision = await h.OnEmitCollection(ctx, payload);
             if (ctx.IsShortCircuited) return (true, ctx.ShortCircuitPayload!);
+            if (decision is EmitDecision.DeferredProjection) return (true, decision);
             if (decision is EmitDecision.Replace replacement)
             {
                 payload = replacement.Payload;
@@ -163,6 +171,8 @@ internal sealed class HookRunner<TEntity>
         {
             var decision = await h.OnEmitModel(ctx, payload);
             if (ctx.IsShortCircuited) return (true, ctx.ShortCircuitPayload!);
+            if (decision is EmitDecision.DeferredProjection)
+                throw new NotSupportedException("Source-bound emit projection supports collection and query responses only.");
             if (decision is EmitDecision.Replace replacement)
             {
                 payload = replacement.Payload;

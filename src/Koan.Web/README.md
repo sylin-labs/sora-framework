@@ -47,6 +47,27 @@ actions only for business operations that are not entity CRUD.
 
 Use transformers when a representation must differ from the stored model; see WEB-0035 below.
 
+For localized content, keep publication authority in the canonical partition while filtering and sorting
+the requested language. An access realization adds that requirement to the ordinary query:
+
+```csharp
+public sealed class ArticleAccess : EntityAccess<Article>
+{
+    public override IAccessFilter<Article> Constrain(IAccessFilter<Article> q, AccessAction action)
+    {
+        if (action != AccessAction.Read) return q;
+        var editor = Principal.IsInRole("editor");
+        return q.Where(article => editor || article.Published, partition: "");
+    }
+}
+```
+
+Here `Article` is the application's Entity type with a `Published` property. The same ID must exist in
+the default partition and satisfy the predicate before the selected content is counted or paged. Even
+an editor requires that counterpart; orphan content stays absent. `null` inherits the current partition,
+while `""` explicitly selects the default. REST and MCP use the same declaration without extra registration.
+Mongo supports the native cross-partition query. Unsupported connectors or query combinations refuse it.
+
 For request-derived business context, implement `IWebContextContributor` with ordinary scoped DI. Koan invokes it
 after authentication and before endpoints. The contributor validates standard `HttpContext` evidence once, then may
 contribute a principal, a capability scope, typed Entity predicates, or an existence-hiding rejection. For example, a
@@ -98,6 +119,30 @@ surface. Static-file wiring stays dormant in API-only hosts that have no real we
 subsequent hooks; `Next()` preserves the current payload. `HookContext.ShortCircuit(...)` stops the
 pipeline immediately and takes precedence over a returned replacement. This applies to both collection
 and model responses through the shared REST/MCP endpoint pipeline.
+
+For a governed collection summary, use the selected rows as the projection source:
+
+```csharp
+return EmitDecision.Project(articles, article => ArticleSummary.From(article));
+```
+
+The hook may load bounded personalization data first and capture it in this mapper. Koan verifies the
+exact selected source sequence, maps each row once, and checks identity and scope again before emitting
+any view. `Project` is terminal: later emit hooks cannot replace its sources or receive its DTOs. Ordinary
+`IProjectionOf<TEntity, TView>.From` remains application mapping code, not an authority claim.
+
+`Project` supports flat collection and body-query responses, including `shape=full`. To keep map, dict,
+or relationship responses, a hook can return `Next()` when `ctx.Options.Shape` is `map` or `dict`, or
+`ctx.Options.IncludeRelationships` is true. Those options are normalized at the shared endpoint before
+hooks. Framework shapes are built after emit hooks, so hooks receive the selected entity rows rather
+than mutable response wrappers. Combining `Project` with those shapes refuses before mapping.
+
+Counterpart reads reject arbitrary `With` payloads and successful custom short-circuits. Hook denial
+statuses remain usable, but arbitrary denial object bodies are removed. A failed mapper returns no
+partial view; its side effects, if any, are not undone. Model and mutation emit do not support `Project`.
+Mapper exceptions are logged server-side and return a safe 500 response with `web.read.projectionFailed`.
+Source-bound projection initially supports string, Guid, and the eight built-in integer key types.
+Other keys, including mutable byte arrays, refuse before mapping; ordinary `With` is unchanged.
 
 Every invoked model hook's `ShortCircuit` result is honored. A pre-save, pre-delete or pre-patch stop
 prevents persistence, including dry runs and batch pre-save validation. An after-fetch stop precedes

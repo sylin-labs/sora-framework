@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Linq.Expressions;
 using System.Security.Claims;
+using Koan.Data.Abstractions.Filtering;
 using Koan.Web.Hooks;
 
 namespace Koan.Web.Authorization;
@@ -29,9 +29,9 @@ public sealed class RowProjection<TEntity>
     private readonly bool _coarseRemove;
     private readonly Func<TEntity, bool>? _owner;
     private readonly bool _authenticatedFallback;
-    private readonly Func<TEntity, bool>[] _readPredicates;
-    private readonly Func<TEntity, bool>[] _writePredicates;
-    private readonly Func<TEntity, bool>[] _removePredicates;
+    private readonly Func<TEntity, bool> _read;
+    private readonly Func<TEntity, bool> _write;
+    private readonly Func<TEntity, bool> _remove;
 
     public RowProjection(
         AccessGate gate,
@@ -41,9 +41,26 @@ public sealed class RowProjection<TEntity>
         bool coarseRemove,
         Func<TEntity, bool>? owner,
         bool authenticatedFallback,
-        IReadOnlyList<Expression<Func<TEntity, bool>>> readPredicates,
-        IReadOnlyList<Expression<Func<TEntity, bool>>> writePredicates,
-        IReadOnlyList<Expression<Func<TEntity, bool>>> removePredicates)
+        Filter? readFilter,
+        Filter? writeFilter,
+        Filter? removeFilter)
+        : this(gate, principal, coarseRead, coarseWrite, coarseRemove, owner, authenticatedFallback,
+            readFilter, writeFilter, removeFilter, null)
+    {
+    }
+
+    internal RowProjection(
+        AccessGate gate,
+        ClaimsPrincipal principal,
+        bool coarseRead,
+        bool coarseWrite,
+        bool coarseRemove,
+        Func<TEntity, bool>? owner,
+        bool authenticatedFallback,
+        Filter? readFilter,
+        Filter? writeFilter,
+        Filter? removeFilter,
+        Func<TEntity, bool>? provenRead)
     {
         _gate = gate ?? throw new ArgumentNullException(nameof(gate));
         _principal = principal ?? throw new ArgumentNullException(nameof(principal));
@@ -52,9 +69,9 @@ public sealed class RowProjection<TEntity>
         _coarseRemove = coarseRemove;
         _owner = owner;
         _authenticatedFallback = authenticatedFallback;
-        _readPredicates = Compile(readPredicates);
-        _writePredicates = Compile(writePredicates);
-        _removePredicates = Compile(removePredicates);
+        _read = provenRead ?? Compile(readFilter, "Read access projection without query evidence");
+        _write = Compile(writeFilter, "Update access projection");
+        _remove = Compile(removeFilter, "Delete access projection");
     }
 
     /// <summary>The verbs this principal may perform on <paramref name="row"/> — read/write/remove (each gated and
@@ -70,11 +87,11 @@ public sealed class RowProjection<TEntity>
         Func<bool> ownerProbe = _owner is null ? (() => _authenticatedFallback) : (() => _owner(row));
 
         var can = new List<string>(4);
-        if (_coarseRead && GateAllows(_gate.For(EntityAuthorizeActions.Read), ownerProbe) && Passes(_readPredicates, row))
+        if (_coarseRead && GateAllows(_gate.For(EntityAuthorizeActions.Read), ownerProbe) && _read(row))
             can.Add(EntityAuthorizeActions.Read);
-        if (_coarseWrite && GateAllows(_gate.For(EntityAuthorizeActions.Write), ownerProbe) && Passes(_writePredicates, row))
+        if (_coarseWrite && GateAllows(_gate.For(EntityAuthorizeActions.Write), ownerProbe) && _write(row))
             can.Add(EntityAuthorizeActions.Write);
-        if (_coarseRemove && GateAllows(_gate.For(EntityAuthorizeActions.Remove), ownerProbe) && Passes(_removePredicates, row))
+        if (_coarseRemove && GateAllows(_gate.For(EntityAuthorizeActions.Remove), ownerProbe) && _remove(row))
             can.Add(EntityAuthorizeActions.Remove);
 
         // SEC-0004 (§C): a custom toolset/controller verb participates with zero extra wiring — it appears exactly
@@ -89,21 +106,9 @@ public sealed class RowProjection<TEntity>
     private bool GateAllows(ActionGate gate, Func<bool> ownerProbe)
         => AccessGateEvaluator.Evaluate(gate, _principal, ownerProbe) is AuthorizeDecision.Allow;
 
-    private static bool Passes(Func<TEntity, bool>[] predicates, TEntity row)
+    private static Func<TEntity, bool> Compile(Filter? filter, string operation)
     {
-        foreach (var predicate in predicates)
-        {
-            if (!predicate(row)) return false;
-        }
-        return true;
-    }
-
-    // Compile each Constrain predicate ONCE here (not per row) — the projection runs them across the whole page.
-    private static Func<TEntity, bool>[] Compile(IReadOnlyList<Expression<Func<TEntity, bool>>> predicates)
-    {
-        if (predicates.Count == 0) return Array.Empty<Func<TEntity, bool>>();
-        var compiled = new Func<TEntity, bool>[predicates.Count];
-        for (var i = 0; i < predicates.Count; i++) compiled[i] = predicates[i].Compile();
-        return compiled;
+        Filter.RequireRowOnly(filter, operation);
+        return filter is null ? _ => true : InMemoryFilterEvaluator.Compile<TEntity>(filter);
     }
 }

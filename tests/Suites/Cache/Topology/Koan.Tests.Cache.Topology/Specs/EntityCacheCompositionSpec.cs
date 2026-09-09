@@ -31,6 +31,20 @@ public sealed class EntityCacheCompositionSpec
     }
 
     [Fact]
+    public async Task Cached_identity_does_not_bypass_unsupported_counterpart_query()
+    {
+        await using var host = await KoanIntegrationHost.Configure()
+            .ConfigureServices(services => services.AddKoan()).StartAsync(TestContext.Current.CancellationToken);
+        using var route = EntityContext.With(adapter: "inmemory", partition: Guid.NewGuid().ToString("N"));
+        var row = await new InsertedCacheEntity { Value = "cached" }.Save();
+        (await InsertedCacheEntity.Get(row.Id))!.Value.Should().Be("cached");
+        var filter = Koan.Data.Abstractions.Filtering.Filter.SameIdIn<InsertedCacheEntity>(item => true, "");
+        await ((Func<Task>)(() => InsertedCacheEntity.AllWithCount(QueryDefinition.All.Where(filter))))
+            .Should().ThrowAsync<NotSupportedException>();
+        (await InsertedCacheEntity.Get(row.Id))!.Value.Should().Be("cached");
+    }
+
+    [Fact]
     public async Task Startup_reports_the_effective_entity_cache_plan()
     {
         var ct = TestContext.Current.CancellationToken;

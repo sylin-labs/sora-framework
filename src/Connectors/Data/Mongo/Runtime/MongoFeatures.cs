@@ -43,11 +43,11 @@ internal static class MongoFeatures
         claims.Capability(DataCaps.Write.InsertOnly);
     }
 
-    public static void Describe(ICapabilities capabilities)
+    public static void Describe(ICapabilities capabilities, bool supportsSameIdIn = false)
     {
         foreach (var capability in All) capabilities.Add(capability);
         capabilities
-            .Add(DataCaps.Query.Filter, Filters)
+            .Add(DataCaps.Query.Filter, Filters with { SupportsSameIdIn = supportsSameIdIn })
             .Add(DataCaps.Query.FilterExecution, new FilterExecutionProfile(FilterExecutionKind.Native));
     }
 }

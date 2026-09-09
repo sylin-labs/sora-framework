@@ -89,3 +89,6 @@ package names.
 Unsupported claims include collection atomicity, distributed transaction coupling, durable
 invalidation replay/catch-up, automatic removal retry, remote settlement, and global flush as a wire
 primitive. Tag flush enumerates matching entries and emits normal per-key invalidations.
+Counterpart query/count definitions pass through the existing query decorator. The optional
+target-binding contract forwards under Data's guarded target context; no counterpart permission
+or joined result is stored in the entity cache.

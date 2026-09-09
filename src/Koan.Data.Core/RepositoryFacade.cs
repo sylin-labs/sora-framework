@@ -37,7 +37,7 @@ namespace Koan.Data.Core;
 /// Provider/module decorators sit inside this facade. This is the one application-facing Data boundary,
 /// so an inner cache hit or specialized provider path cannot bypass these semantics.
 /// </summary>
-internal sealed class RepositoryFacade<TEntity, TKey> :
+internal sealed partial class RepositoryFacade<TEntity, TKey> :
     IDataRepository<TEntity, TKey>,
     IQueryRepository<TEntity, TKey>,
     IBoundedQueryRepository<TEntity, TKey>,
@@ -74,6 +74,7 @@ internal sealed class RepositoryFacade<TEntity, TKey> :
     private readonly DataSourcePlan _sourcePlan;
     private readonly DataOperationHorizon? _operationHorizon;
     private readonly DataRouteBinding? _routeBinding;
+    private readonly Func<DataRouteBinding?>? _resolveRoute;
 
     public RepositoryFacade(
         IDataRepository<TEntity, TKey> inner,
@@ -84,7 +85,8 @@ internal sealed class RepositoryFacade<TEntity, TKey> :
         StorageFieldTransformPlan? fieldTransforms = null,
         DataSourcePlan? sourcePlan = null,
         DataOperationHorizon? operationHorizon = null,
-        DataRouteBinding? routeBinding = null)
+        DataRouteBinding? routeBinding = null,
+        Func<DataRouteBinding?>? resolveRoute = null)
     {
         _inner = inner;
         _guards = guards ?? Array.Empty<IStorageGuard>();
@@ -98,6 +100,7 @@ internal sealed class RepositoryFacade<TEntity, TKey> :
         _sourcePlan = sourcePlan ?? DataSourcePlan.Default;
         _operationHorizon = operationHorizon;
         _routeBinding = routeBinding;
+        _resolveRoute = resolveRoute;
         _idField = AggregateMetadata.GetIdSpec(typeof(TEntity))?.Prop.Name ?? "Id";
         // The adapter is inspected once iff this entity could ever be scoped: it has a managed descriptor (write-stamp
         // + equality read) OR a NON-default read-filter contributor (a predicate axis). The built-in equality
@@ -617,16 +620,45 @@ internal sealed class RepositoryFacade<TEntity, TKey> :
 
     public async Task<RepositoryQueryResult<TEntity>> Query(QueryDefinition query, CancellationToken ct = default)
     {
-        var result = await QueryCandidates(query, ct);
-        await ApplyLoadLifecycle(result.Items, ct);
-        return result;
+        using var partition = EntityContext.With(partition: query.Partition);
+        query = query with { Filter = Filter.Snapshot(query.Filter), Sort = query.Sort.ToArray() };
+        var support = DataCaps.Describe(_inner, _inner.GetType().Name).Detail<FilterSupport>(DataCaps.Query.Filter) ?? FilterSupport.None;
+        var (adapterQuery, residual) = FilterPushdownCoordinator.Plan(query, support, typeof(TEntity));
+        var result = await QueryCandidates(adapterQuery, ct);
+        var finalized = FilterPushdownCoordinator.Finalize(query, adapterQuery, residual, result);
+        await ApplyLoadLifecycle(finalized.Page, ct);
+        DataQueryExecution<TEntity, TKey>.ValidateEvidence(result.ReadEvidence, finalized.Page);
+        return new RepositoryQueryResult<TEntity>
+        {
+            Items = finalized.Page,
+            FilterHandled = true,
+            SortHandled = query.Sort.ToHashSet(),
+            PaginationHandled = query.HasPagination,
+            TotalCount = query.CountStrategy is null ? null : finalized.TotalCount,
+            CountExecution = query.CountStrategy is null ? CountExecutionKind.None :
+                finalized.IsEstimate ? CountExecutionKind.Fast : CountExecutionKind.Exact,
+            IsEstimate = query.CountStrategy is not null && finalized.IsEstimate,
+            MaterializedAllCandidates = result.MaterializedAllCandidates || finalized.FellBackInMemory,
+            ReadEvidence = result.ReadEvidence
+        };
     }
 
     private async Task<RepositoryQueryResult<TEntity>> QueryCandidates(
         QueryDefinition query,
         CancellationToken ct)
     {
+        using var partition = EntityContext.With(partition: query.Partition);
         await using var operationScope = await Guard(DataOperationEffect.Read, "entity query", ct);
+        if (Filter.HasCounterpart(query.Filter))
+        {
+            return await ExecuteCounterpartRead(query, operationScope.Segmentation, async bound =>
+            {
+                var result = await RequireQuery().Query(bound.Query, ct);
+                QueryReceiptValidator.Validate(bound.Query, result);
+                result.ReadEvidence = bound.Evidence(result.Items);
+                return Reverse(result);
+            }, ct);
+        }
         var segmentation = operationScope.Segmentation;
         var managed = ReadScopeFilter(segmentation);
         return Reverse(await RequireQuery().Query(managed is null ? query : ApplyManaged(query, managed), ct));
@@ -655,7 +687,13 @@ internal sealed class RepositoryFacade<TEntity, TKey> :
 
     public async Task<CountResult> Count(QueryDefinition query, CancellationToken ct = default)
     {
+        using var partition = EntityContext.With(partition: query.Partition);
         await using var operationScope = await Guard(DataOperationEffect.Read, "entity count", ct);
+        if (Filter.HasCounterpart(query.Filter))
+        {
+            return await ExecuteCounterpartRead(query, operationScope.Segmentation,
+                bound => RequireQuery().Count(bound.Query, ct), ct);
+        }
         var segmentation = operationScope.Segmentation;
         var managed = ReadScopeFilter(segmentation);
         return await RequireQuery().Count(managed is null ? query : ApplyManaged(query, managed), ct);
@@ -666,8 +704,10 @@ internal sealed class RepositoryFacade<TEntity, TKey> :
         int maxCandidates,
         CancellationToken ct = default)
     {
+        using var partition = EntityContext.With(partition: query.Partition);
         var result = await QueryBoundedCandidatesRaw(query, maxCandidates, ct);
         await ApplyLoadLifecycle(result.Items, ct);
+        DataQueryExecution<TEntity, TKey>.ValidateEvidence(result.ReadEvidence, result.Items);
         return result;
     }
 
@@ -676,7 +716,26 @@ internal sealed class RepositoryFacade<TEntity, TKey> :
         int maxCandidates,
         CancellationToken ct)
     {
+        using var partition = EntityContext.With(partition: query.Partition);
         await using var operationScope = await Guard(DataOperationEffect.Read, "entity bounded query", ct);
+        if (Filter.HasCounterpart(query.Filter))
+        {
+            var native = _inner as IBoundedQueryRepository<TEntity, TKey>
+                ?? throw new NotSupportedException("The selected connector cannot bound counterpart query candidates.");
+            var counterpartResult = await ExecuteCounterpartRead(query, operationScope.Segmentation, async bound =>
+            {
+                var result = await native.QueryBoundedCandidates(bound.Query, maxCandidates, ct);
+                if (result.Items.Count > maxCandidates)
+                    throw new InvalidOperationException("The connector exceeded the counterpart candidate bound.");
+                return result with { ReadEvidence = bound.Evidence(result.Items) };
+            }, ct);
+            foreach (var entity in counterpartResult.Items)
+            {
+                var transform = FieldTransformFor(entity);
+                if (transform.HasTransforms) transform.ApplyOnRead(entity);
+            }
+            return counterpartResult;
+        }
         var segmentation = operationScope.Segmentation;
         var managed = ReadScopeFilter(segmentation);
         var bounded = _inner as IBoundedQueryRepository<TEntity, TKey>
@@ -712,6 +771,7 @@ internal sealed class RepositoryFacade<TEntity, TKey> :
 
     public async Task<RepositoryQueryResult<TEntity>> QueryRaw(string query, object? parameters, QueryDefinition shaping, CancellationToken ct = default)
     {
+        Filter.RequireRowOnly(shaping.Filter, "A raw query");
         await using var operationScope = await Guard(DataOperationEffect.Read, "entity raw query", ct);
         var segmentation = operationScope.Segmentation;
         GuardRawAgainstActiveScope(segmentation);

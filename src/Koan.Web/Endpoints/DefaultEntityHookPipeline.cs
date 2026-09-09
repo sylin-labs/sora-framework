@@ -3,7 +3,7 @@ using Koan.Web.Hooks;
 
 namespace Koan.Web.Endpoints;
 
-internal sealed class DefaultEntityHookPipeline<TEntity> : IEntityHookPipeline<TEntity>
+internal sealed class DefaultEntityHookPipeline<TEntity> : IEntityHookPipeline<TEntity> where TEntity : class
 {
     private readonly HookRunner<TEntity> _runner;
 

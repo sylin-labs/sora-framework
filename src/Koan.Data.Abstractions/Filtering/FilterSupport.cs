@@ -13,6 +13,9 @@ public sealed record FilterSupport(
     bool NestedPaths = true,
     bool IgnoreCase = false)
 {
+    /// <summary>Native same-Entity identity counterpart queries. Row operator support alone never grants this capability.</summary>
+    public bool SupportsSameIdIn { get; init; }
+
     /// <summary>
     /// Whether the provider can faithfully negate a supported subtree, including rows where a
     /// referenced field is null or absent. Providers with three-valued or missing-key semantics

@@ -34,6 +34,8 @@ public static class FilterPushdownCoordinator
         if (query.Filter is null) return (query, null);
 
         var split = FilterSplitter.Split(query.Filter, caps, entityType);
+        if (Filter.HasCounterpart(query.Filter) && split.Residual is not null)
+            throw new NotSupportedException("Counterpart queries require native execution of the complete predicate. Use a supported connector, identity shape, and fully translatable filter.");
         var adapterQuery = query.Where(split.Pushable);
         if (split.Residual is not null)
             adapterQuery = adapterQuery

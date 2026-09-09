@@ -139,3 +139,36 @@ Queries use the same spelling. Ordinary enum ordering uses declared ordinal rank
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
 Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+
+## Counterpart execution
+
+`ICounterpartQueryRepository.BindCounterpartTarget` captures the current physical collection and selected route
+without creating a client or reading candidates. Its private generic target binds Entity and key shape. Data owns
+source/isolation qualification; Mongo additionally rejects a foreign target, route, key shape, or explicit mapping.
+Only ordinary managed repositories advertise `FilterSupport.SupportsSameIdIn`.
+
+The compiler requires bound nodes and fully native inner/outer predicates and ordering. One lookup per distinct
+bound leaf correlates native `_id` values, matches the scoped inner predicate, limits to one result, and projects
+only `_id`. All/Any/Not are evaluated over the full outer Boolean tree; no OR arm becomes an unconditional match.
+Mandatory row-only conjuncts also run as a leading native match before the envelope and lookup. A keyed outer
+predicate therefore uses its identity index before counterpart work. Extraction descends only through AllOf;
+Any/Not subtrees containing counterparts remain intact, and the complete final predicate still runs.
+Nested or residual nodes reject during compilation before collection readiness or candidate dispatch.
+
+An internal `$$ROOT` envelope preserves every original document member. Lookup slots and computed ordering slots
+live beside that envelope. The page pipeline restores the original root before hydration, so stored fields named
+like internal slots survive unchanged. Native identity is the stable final sort key. Count uses the identical
+qualified prefix plus `$count`; no-count and bounded reads issue only page work, while count-only issues no page.
+The adapter retains separate count/page commands and makes no cross-command snapshot or cursor-retraction claim.
+
+`MongoCounterpartQuerySpec` characterizes canonical publication/suppression/claims, orphan exclusion, translated
+search and ordering, Boolean composition, source-member collisions with computed ordering, rejection, committed
+authority changes, cancellation, concurrent partition binding, and native command/lookup receipts on isolated data.
+Native explain confirms a keyed query examines one indexed outer document and one indexed counterpart document.
+A load-hook identity-substitution regression covers both direct Data and facade query results.
+`MongoCounterpartScopeSpec` covers legacy managed equality, target read contributors, same-ID tenant separation,
+null/unscoped binding changes, multiple targets, and operation-local evidence invalidation.
+
+Counterpart identity evidence is initially qualified for string, Guid, and the eight integral CLR
+key types. Mapped identities and other key types (including mutable byte[] keys) do not advertise
+SupportsSameIdIn and reject counterpart binding. Ordinary persistence support is unchanged.

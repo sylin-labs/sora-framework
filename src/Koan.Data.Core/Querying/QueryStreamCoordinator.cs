@@ -142,9 +142,12 @@ internal static class QueryStreamCoordinator
                 if (residualPredicate is null || residualPredicate(item))
                 {
                     using (enterContext())
+                    {
                         await DataQueryExecution<TEntity, TKey>
                             .MaterializeVisible(repository, item, ct)
                             .ConfigureAwait(false);
+                        DataQueryExecution<TEntity, TKey>.ValidateEvidence(result.ReadEvidence, [item]);
+                    }
                     yield return item;
                 }
             }

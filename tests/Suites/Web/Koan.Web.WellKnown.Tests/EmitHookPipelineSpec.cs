@@ -52,4 +52,20 @@ public sealed class EmitHookPipelineSpec
         public Task<EmitDecision> OnEmitCollection(HookContext<object> context, object payload) => Task.FromResult(emit(context, payload));
         public Task<EmitDecision> OnEmitModel(HookContext<object> context, object payload) => Task.FromResult(emit(context, payload));
     }
+
+    [Fact]
+    public async Task Model_projection_refuses_before_mapper_or_later_hook()
+    {
+        using var services = new ServiceCollection().BuildServiceProvider();
+        var context = new HookContext<object>(new EntityRequestContext(services, new QueryOptions(), default));
+        var row = new object();
+        var maps = 0;
+        var later = 0;
+        var runner = new HookRunner<object>([], [], [], [
+            new Hook(0, (_, _) => EmitDecision.Project(new[] { row }, _ => { maps++; return "view"; })),
+            new Hook(1, (_, _) => { later++; return EmitDecision.Next(); })]);
+        await Assert.ThrowsAsync<NotSupportedException>(() => runner.EmitModel(context, row));
+        Assert.Equal(0, maps);
+        Assert.Equal(0, later);
+    }
 }

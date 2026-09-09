@@ -121,3 +121,7 @@ See the [Cache reference](../../docs/reference/data/cache.md) and [technical not
 Atomic insertion is forwarded through the existing Entity repository decorator when the selected
 provider supports `DataCaps.Write.InsertOnly`. Proven committed insertion invalidates its cache key;
 conflict does not cache or expose the rejected payload or an existing row.
+
+Counterpart predicates use the underlying provider's structured query path and capability.
+A cached entity is never evidence that its counterpart satisfies a current read constraint;
+unsupported providers reject the query even when an identity is already cached.

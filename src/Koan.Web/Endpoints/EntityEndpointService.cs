@@ -19,7 +19,6 @@ using Koan.Data.Core.Relationships;
 using Koan.Data.Abstractions.Filtering;
 using Koan.Data.Abstractions.Instructions;
 using Koan.Web.Authorization;
-using Koan.Web.Filtering;
 using Koan.Web.Hooks;
 using Koan.Web.Infrastructure;
 
@@ -34,9 +33,6 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     private readonly IAuthorize? _authorize;
     private readonly IAccessGateCache? _gateCache;
     private readonly ILogger<EntityEndpointService<TEntity, TKey>>? _logger;
-
-    private static readonly IReadOnlyList<Expression<Func<TEntity, bool>>> NoPredicates =
-        Array.Empty<Expression<Func<TEntity, bool>>>();
 
     // SEC-0005: an [Audit] entity writes one AgentAction per successful MUTATION (write/remove) through the normal
     // entity path; reads are never audited. Computed once per closed generic. A bulk op records one row (EntityId="").
@@ -137,6 +133,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     {
         var filter = new AccessFilter<TEntity>();
         accessor.Constrain(filter, action);
+        if (action != AccessAction.Read)
+            Filter.RequireRowOnly(filter.Filter, $"{action} access constraint");
         return filter;
     }
 
@@ -148,7 +146,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         if (accessor is null) return (null, null);
         var create = ConstrainFor(accessor, AccessAction.Create);
         var update = ConstrainFor(accessor, AccessAction.Update);
-        return create.HasStamps || create.Predicates.Count != 0 || update.HasStamps || update.Predicates.Count != 0
+        return create.HasStamps || create.Filter is not null || update.HasStamps || update.Filter is not null
             ? (create, update)
             : (null, null);
     }
@@ -162,7 +160,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     // gate (the SAME gate the floor provider enforces, so the projection never disagrees with enforcement), the
     // principal, the realization's single Owner predicate, and the per-verb Constrain predicates (Update is the
     // row-bound write; Delete the row-bound remove).
-    private async Task<RowProjection<TEntity>> CreateProjector(EntityRequestContext context)
+    private async Task<RowProjection<TEntity>> CreateProjector(EntityRequestContext context,
+        Filter? frozenReadFilter, EndpointReadProof<TEntity, TKey>? proof = null)
     {
         var coarseRead = await CoarseAllows(context, EntityAuthorizeActions.Read).ConfigureAwait(false);
         var coarseWrite = await CoarseAllows(context, EntityAuthorizeActions.Write).ConfigureAwait(false);
@@ -173,20 +172,20 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         var authed = context.User.Identity?.IsAuthenticated == true;
         var owner = accessor?.OwnerExpression?.Compile();
 
-        var readPredicates = accessor is null ? NoPredicates : ConstrainFor(accessor, AccessAction.Read).Predicates;
-        var writePredicates = accessor is null ? NoPredicates : ConstrainFor(accessor, AccessAction.Update).Predicates;
-        var removePredicates = accessor is null ? NoPredicates : ConstrainFor(accessor, AccessAction.Delete).Predicates;
+        var writeFilter = accessor is null ? null : ConstrainFor(accessor, AccessAction.Update).Filter;
+        var removeFilter = accessor is null ? null : ConstrainFor(accessor, AccessAction.Delete).Filter;
 
         return new RowProjection<TEntity>(gate, context.User, coarseRead, coarseWrite, coarseRemove,
-            owner, authed, readPredicates, writePredicates, removePredicates);
+            owner, authed, frozenReadFilter, writeFilter, removeFilter, proof is null ? null : proof.Contains);
     }
 
     // SEC-0004 (§C): the per-row can:[] manifest for a set of rows (id → { can }). Computed once per request and
     // stored on the context for any surface to render — REST wraps it as the `access` sidecar, the MCP edge
     // attaches it to the tool-result metadata.
-    private async Task<Dictionary<string, object>> BuildAccessManifest(EntityRequestContext context, IReadOnlyList<TEntity> rows)
+    private async Task<Dictionary<string, object>> BuildAccessManifest(EntityRequestContext context,
+        IReadOnlyList<TEntity> rows, Filter? frozenReadFilter, EndpointReadProof<TEntity, TKey>? proof)
     {
-        var projector = await CreateProjector(context).ConfigureAwait(false);
+        var projector = await CreateProjector(context, frozenReadFilter, proof).ConfigureAwait(false);
         var manifest = new Dictionary<string, object>(rows.Count, StringComparer.Ordinal);
         foreach (var row in rows)
         {
@@ -214,6 +213,9 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     public async Task<EntityCollectionResult<TEntity>> GetCollection(EntityCollectionRequest request)
     {
         var context = request.Context;
+        context.Options.Shape = request.Shape ?? context.Options.Shape;
+        if (request.With is not null)
+            context.Options.IncludeRelationships = request.With.Contains("all", StringComparison.OrdinalIgnoreCase);
         if (await Gate(context, EntityAuthorizeActions.Read).ConfigureAwait(false) is { } denied) return CollectionDenied(context, denied);
         await AnnotateAccess(context).ConfigureAwait(false);
         var repo = _dataService.GetRepository<TEntity, TKey>();
@@ -226,16 +228,34 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             return CollectionShortCircuit(context, hookContext);
         }
 
+        QueryDefinition query;
+        try
+        {
+            query = FreezeReadQuery(BuildQueryDefinition(request, context.Options),
+                request.FilterJson, request.IgnoreCase, context.Options);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FilterParseException or InvalidFilterFieldException or NotSupportedException)
+        {
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, new BadRequestObjectResult(new { error = ex.Message }));
+        }
+        var frozenReadFilter = context.Options.Filter;
+        var shape = context.Options.Shape;
+        var includeRelationships = context.Options.IncludeRelationships;
+        var proof = EndpointReadProof<TEntity, TKey>.Prepare(context, query);
+
         if (!await _hookPipeline.BeforeCollection(hookContext, context.Options))
         {
-            return CollectionShortCircuit(context, hookContext);
+            return CollectionShortCircuit(context, hookContext, proof is not null);
         }
+        if (proof is not null && !proof.IsRequestUnchanged(context))
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
 
         RepositoryQueryResult queryResult;
         long total;
         try
         {
-            queryResult = await QueryCollection(request, context.Options, context.CancellationToken);
+            queryResult = await QueryCollection(query, context.Options.Q, request.AbsoluteMaxRecords,
+                context.CancellationToken);
             total = queryResult.Total;
         }
         catch (Exception ex) when (ex is InvalidOperationException or FilterParseException or InvalidFilterFieldException or NotSupportedException)
@@ -266,6 +286,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         // The orchestrator inspects RepositoryQueryResult.SortHandled and falls back to in-memory sort
         // when the adapter cannot push it down — see DATA-0092.
         var list = queryResult.Items.ToList();
+        if (proof is not null && !proof.Bind(queryResult.ReadEvidence, list))
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
 
         var shouldPaginate = request.ApplyPagination;
 
@@ -302,32 +324,69 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         if (!await _hookPipeline.AfterCollection(hookContext, list))
         {
-            return CollectionShortCircuit(context, hookContext);
+            return CollectionShortCircuit(context, hookContext, proof is not null);
         }
+        if (proof is not null && !proof.IsValid(context, list))
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
 
         object payload = list;
+        var relationshipEvidence = new List<Func<bool>>();
+        var projectionSourcesUnchanged = CaptureProjectionSources(context, query, list, proof);
+        var emit = await _hookPipeline.EmitCollection(hookContext, list);
+        if (hookContext.IsShortCircuited) return CollectionShortCircuit(context, hookContext, proof is not null);
+        if (emit.payload is EmitDecision.DeferredProjection projection)
+        {
+            if (!ProjectionKeySupported())
+                return new EntityCollectionResult<TEntity>(context, [], 0, null, ProjectionKeyRejected());
+            if (!IsFlatProjection(context.Options))
+                return new EntityCollectionResult<TEntity>(context, [], 0, null, ProjectionShapeRejected());
+            if (!projection.Matches(list) || !projectionSourcesUnchanged())
+                return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
+            try
+            {
+                var projected = projection.Map(projectionSourcesUnchanged);
+                if (projected is null)
+                    return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
+                payload = projected;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return new EntityCollectionResult<TEntity>(context, [], 0, null, ProjectionFailed(context, ex));
+            }
+        }
+        else if (emit.replaced)
+        {
+            if (proof is not null)
+                return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
+            payload = emit.payload;
+        }
+        if (proof is not null && !proof.IsValid(context, list))
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
 
-        if (!string.IsNullOrWhiteSpace(request.With) && request.With.Contains("all", StringComparison.OrdinalIgnoreCase))
+        // Framework containers are built after custom hooks, so no hook can mutate an unproved
+        // map entry or relationship wrapper. A terminal projection has already selected its view.
+        if (!emit.replaced && includeRelationships)
         {
             try
             {
-                payload = await EnrichRelationships(list, context, request.Set);
+                payload = await EnrichRelationships(list, context, request.Set, relationshipEvidence);
             }
             catch (RelationshipQueryRejectedException ex)
             {
                 return new EntityCollectionResult<TEntity>(context, list, total, null, RelationshipRejectedResult(ex));
             }
+            catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException)
+            {
+                return new EntityCollectionResult<TEntity>(context, [], 0, null, new BadRequestObjectResult(new { error = ex.Message }));
+            }
         }
-        else if (!string.IsNullOrWhiteSpace(request.Shape))
+        else if (!emit.replaced && !string.IsNullOrWhiteSpace(shape))
         {
-            payload = ApplyShape(request.Shape, list);
+            payload = ApplyShape(shape, list);
         }
 
         ApplyViewHeader(context, request.Accept);
 
-        var emit = await _hookPipeline.EmitCollection(hookContext, payload);
-        if (hookContext.IsShortCircuited) return CollectionShortCircuit(context, hookContext);
-        payload = emit.replaced ? emit.payload : payload;
         CopyHookHeaders(context, hookContext);
 
         // SEC-0004 (§C): the per-row capability projection. Opt-in (REST ?access=true / MCP default) keeps the bare
@@ -335,10 +394,14 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         // context. Computed after EmitCollection so `items` carries whatever the response would have been.
         if (ShouldProject(context, request.IncludeAccess, out var wrapAccess))
         {
-            var manifest = await BuildAccessManifest(context, list).ConfigureAwait(false);
+            var manifest = await BuildAccessManifest(context, list, frozenReadFilter, proof).ConfigureAwait(false);
             if (wrapAccess) payload = new { items = payload, access = manifest };
         }
 
+        if ((proof is not null && !proof.IsValid(context, list))
+            || (emit.payload is EmitDecision.DeferredProjection && !projectionSourcesUnchanged())
+            || relationshipEvidence.Any(check => !check()))
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
         return new EntityCollectionResult<TEntity>(context, list, total, payload);
     }
 
@@ -357,16 +420,34 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             return CollectionShortCircuit(context, hookContext);
         }
 
+        QueryDefinition query;
+        try
+        {
+            var definition = QueryDefinition.All.ForPartition(request.Set).WithSort(context.Options.Sort.ToArray());
+            if (context.Options.Page > 0 && context.Options.PageSize > 0)
+                definition = definition.WithPagination(context.Options.Page, context.Options.PageSize);
+            query = FreezeReadQuery(definition, request.FilterJson, request.IgnoreCase, context.Options);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or FilterParseException or InvalidFilterFieldException or NotSupportedException)
+        {
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, new BadRequestObjectResult(new { error = ex.Message }));
+        }
+        var frozenReadFilter = context.Options.Filter;
+        var proof = EndpointReadProof<TEntity, TKey>.Prepare(context, query);
+
         if (!await _hookPipeline.BeforeCollection(hookContext, context.Options))
         {
-            return CollectionShortCircuit(context, hookContext);
+            return CollectionShortCircuit(context, hookContext, proof is not null);
         }
+        if (proof is not null && !proof.IsRequestUnchanged(context))
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
 
-        IReadOnlyList<TEntity> repositoryItems;
+        RepositoryQueryResult queryResult;
         long total;
         try
         {
-            (repositoryItems, total) = await QueryCollectionFromBody(repo, request, context.Options, context.CancellationToken);
+            queryResult = await QueryCollection(query, context.Options.Q, 0, context.CancellationToken);
+            total = queryResult.Total;
         }
         catch (Exception ex) when (ex is InvalidOperationException or FilterParseException or InvalidFilterFieldException or NotSupportedException)
         {
@@ -376,7 +457,9 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         // Sort + pagination handled by orchestrator inside QueryCollectionFromBody (DATA-0092).
         // The caller only sets headers — never paginates again, or we'd page-of-page (regression).
-        var list = repositoryItems.ToList();
+        var list = queryResult.Items.ToList();
+        if (proof is not null && !proof.Bind(queryResult.ReadEvidence, list))
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
         if (context.Options.PageSize > 0)
         {
             context.Headers["X-Page"] = context.Options.Page.ToString();
@@ -386,23 +469,51 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         if (!await _hookPipeline.AfterCollection(hookContext, list))
         {
-            return CollectionShortCircuit(context, hookContext);
+            return CollectionShortCircuit(context, hookContext, proof is not null);
         }
+        if (proof is not null && !proof.IsValid(context, list))
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
 
         ApplyViewHeader(context, request.Accept);
 
+        var projectionSourcesUnchanged = CaptureProjectionSources(context, query, list, proof);
         var emit = await _hookPipeline.EmitCollection(hookContext, list);
-        if (hookContext.IsShortCircuited) return CollectionShortCircuit(context, hookContext);
-        var payload = emit.replaced ? emit.payload : list;
+        if (hookContext.IsShortCircuited) return CollectionShortCircuit(context, hookContext, proof is not null);
+        object payload = emit.replaced ? emit.payload : list;
+        if (emit.payload is EmitDecision.DeferredProjection projection)
+        {
+            if (!ProjectionKeySupported())
+                return new EntityCollectionResult<TEntity>(context, [], 0, null, ProjectionKeyRejected());
+            if (!IsFlatProjection(context.Options))
+                return new EntityCollectionResult<TEntity>(context, [], 0, null, ProjectionShapeRejected());
+            if (!projection.Matches(list) || !projectionSourcesUnchanged())
+                return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
+            try
+            {
+                var projected = projection.Map(projectionSourcesUnchanged);
+                if (projected is null)
+                    return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
+                payload = projected;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return new EntityCollectionResult<TEntity>(context, [], 0, null, ProjectionFailed(context, ex));
+            }
+        }
+        else if (proof is not null && emit.replaced)
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
         CopyHookHeaders(context, hookContext);
 
         // SEC-0004 (§C): the body-query path has no REST sidecar toggle (the bare body schema stays stable); the MCP
         // edge still opts in by default, so the manifest is computed + stashed for the tool-result metadata.
         if (ShouldProject(context, includeAccess: false, out _))
         {
-            await BuildAccessManifest(context, list).ConfigureAwait(false);
+            await BuildAccessManifest(context, list, frozenReadFilter, proof).ConfigureAwait(false);
         }
 
+        if ((proof is not null && !proof.IsValid(context, list))
+            || (emit.payload is EmitDecision.DeferredProjection && !projectionSourcesUnchanged()))
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
         return new EntityCollectionResult<TEntity>(context, list, total, payload);
     }
 
@@ -415,6 +526,13 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         context.Capabilities = Capabilities(repo);
 
         var hookContext = _hookPipeline.CreateContext(context);
+        if (!await _hookPipeline.BuildOptions(hookContext, context.Options))
+            return ModelShortCircuit(context, hookContext);
+        if (Filter.HasCounterpart(context.Options.Filter))
+            return new EntityModelResult<TEntity>(context, null, null, new BadRequestObjectResult(new
+            {
+                error = "A new-entity template has no persisted identity to authorize against a counterpart. Query an existing entity instead."
+            }));
 
         var model = Activator.CreateInstance<TEntity>();
         if (!await _hookPipeline.AfterModelFetch(hookContext, model))
@@ -433,6 +551,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     public async Task<EntityModelResult<TEntity>> GetById(EntityGetByIdRequest<TKey> request)
     {
         var context = request.Context;
+        if (request.With is not null)
+            context.Options.IncludeRelationships = request.With.Contains("all", StringComparison.OrdinalIgnoreCase);
         if (await Gate(context, EntityAuthorizeActions.Read).ConfigureAwait(false) is { } denied) return ModelDenied(context, denied);
         await AnnotateAccess(context).ConfigureAwait(false);
         var repo = _dataService.GetRepository<TEntity, TKey>();
@@ -440,25 +560,52 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         var hookContext = _hookPipeline.CreateContext(context);
 
-        // WEB-0068: IRequestOptionsHook predicates are read-visibility filters. The collection/query
-        // paths AND-compose them into the adapter query; the keyed read must apply the same predicates
-        // against the fetched row, or a row hidden from every listing stays reachable by id — a
-        // row-level visibility bypass. BuildOptions runs the hooks; PassesRequestPredicates enforces them.
+        // The same normalized read constraint reaches keyed and collection reads.
         if (!await _hookPipeline.BuildOptions(hookContext, context.Options))
         {
             return ModelShortCircuit(context, hookContext);
         }
 
+        context.Options.Filter = Filter.Snapshot(context.Options.Filter);
+        var frozenReadFilter = context.Options.Filter;
+        using var partition = EntityContext.With(partition: request.Set);
+        var query = QueryDefinition.All.ForPartition(request.Set).WithPagination(1, 1)
+            .Where(Filter.And(Filter.Eq(nameof(IEntity<TKey>.Id), request.Id), frozenReadFilter));
+        var proof = EndpointReadProof<TEntity, TKey>.Prepare(context, query);
+
         if (!await _hookPipeline.BeforeModelFetch(hookContext, request.Id?.ToString() ?? ""))
         {
-            return ModelShortCircuit(context, hookContext);
+            return ModelShortCircuit(context, hookContext, proof is not null);
         }
+        if (proof is not null && !proof.IsRequestUnchanged(context))
+            return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
 
-        using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
-        var model = await Data<TEntity, TKey>.Get(request.Id!, context.CancellationToken);
+        TEntity? model;
+        if (proof is null)
+        {
+            model = await Data<TEntity, TKey>.Get(request.Id!, context.CancellationToken);
+        }
+        else
+        {
+            try
+            {
+                var queryRepository = _dataService.GetRepository<TEntity, TKey>() as IQueryRepository<TEntity, TKey>
+                    ?? throw new NotSupportedException("The selected connector does not support governed structured reads.");
+                var result = await queryRepository.Query(proof.Query.WithCountStrategy(null), context.CancellationToken);
+                if (!proof.Bind(result.ReadEvidence, result.Items))
+                    return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
+                model = result.Items.SingleOrDefault();
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
+            {
+                return new EntityModelResult<TEntity>(context, null, null, new BadRequestObjectResult(new { error = ex.Message }));
+            }
+        }
         if (!await _hookPipeline.AfterModelFetch(hookContext, model))
-            return ModelShortCircuit(context, hookContext);
-        if (model is null || !PassesRequestPredicates(model, context.Options.Predicates))
+            return ModelShortCircuit(context, hookContext, proof is not null);
+        if (proof is not null && !proof.IsValid(context, model is null ? [] : [model]))
+            return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
+        if (model is null || (proof is null && !PassesRequestPredicates(model, frozenReadFilter)))
         {
             // A predicate-filtered row returns the same NotFound as a missing row so existence is not
             // revealed to a caller the visibility hook excludes.
@@ -472,11 +619,11 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         // non-owner advertises `read`, not `read, write` — honest about what the principal may actually do.
         if (_authorize is not null && ResolveAccessor(context) is not null)
         {
-            var projector = await CreateProjector(context).ConfigureAwait(false);
+            var projector = await CreateProjector(context, frozenReadFilter, proof).ConfigureAwait(false);
             context.Headers["Koan-Access"] = string.Join(", ", projector.Can(model));
         }
 
-        if (!string.IsNullOrWhiteSpace(request.With) && request.With.Contains("all", StringComparison.OrdinalIgnoreCase) && model is Entity<TEntity, TKey>)
+        if (context.Options.IncludeRelationships && model is Entity<TEntity, TKey>)
         {
             // WEB-0068 / AN-leak: relationship expansion must govern every related entity by ITS OWN
             // type's visibility predicates — domain Relatives() is app-authority and would tunnel
@@ -490,16 +637,26 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             {
                 return new EntityModelResult<TEntity>(context, model, null, RelationshipRejectedResult(ex));
             }
+            catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException)
+            {
+                return new EntityModelResult<TEntity>(context, null, null, new BadRequestObjectResult(new { error = ex.Message }));
+            }
             ApplyViewHeader(context, request.Accept);
             CopyHookHeaders(context, hookContext);
+            if (proof is not null && !proof.IsValid(context, [model]))
+                return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
             return new EntityModelResult<TEntity>(context, model, enriched);
         }
 
         ApplyViewHeader(context, request.Accept);
         var emit = await _hookPipeline.EmitModel(hookContext, model);
-        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext);
+        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext, proof is not null);
+        if (proof is not null && emit.replaced)
+            return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
         var payload = emit.replaced ? emit.payload : model;
         CopyHookHeaders(context, hookContext);
+        if (proof is not null && !proof.IsValid(context, [model]))
+            return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
         return new EntityModelResult<TEntity>(context, model, payload);
     }
 
@@ -559,7 +716,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             else
             {
                 var constrain = mutation.Update!;
-                if (!PassesRequestPredicates(before, constrain.Predicates))
+                if (!PassesRequestPredicates(before, constrain.Filter))
                 {
                     return new EntityModelResult<TEntity>(context, null, null, new NotFoundResult());
                 }
@@ -650,7 +807,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
                 else
                 {
                     var constrain = mutation.Update!;
-                    if (!PassesRequestPredicates(before, constrain.Predicates))
+                    if (!PassesRequestPredicates(before, constrain.Filter))
                     {
                         return new EntityEndpointResult(context, null, new NotFoundResult());
                     }
@@ -705,6 +862,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         context.Capabilities = Capabilities(repo);
 
         var hookContext = _hookPipeline.CreateContext(context);
+        var accessor = ResolveAccessor(context);
+        var constraint = accessor is null ? null : ConstrainFor(accessor, AccessAction.Delete);
 
         using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
         var model = await Data<TEntity, TKey>.Get(request.Id, context.CancellationToken);
@@ -714,8 +873,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         }
 
         // SEC-0004: a row outside the principal's scope is a 404, never deleted (existence-hiding, matches reads).
-        var accessor = ResolveAccessor(context);
-        if (accessor is not null && !PassesRequestPredicates(model, ConstrainFor(accessor, AccessAction.Delete).Predicates))
+        if (constraint is not null && !PassesRequestPredicates(model, constraint.Filter))
         {
             return new EntityModelResult<TEntity>(context, null, null, new NotFoundResult());
         }
@@ -766,17 +924,17 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
         IReadOnlyCollection<TKey> targets = request.Ids ?? [];
         var accessor = ResolveAccessor(context);
+        var constrain = accessor is null ? null : ConstrainFor(accessor, AccessAction.Delete);
         if (accessor is not null && targets.Count > 0)
         {
             // SEC-0004: trust no id — a row must be in scope to be deleted (out-of-scope ids are silently skipped,
             // the same hidden-row semantics as a single delete). This bounding runs BEFORE the dry-run report so a
             // rehearsal cannot leak the existence of out-of-scope ids.
-            var constrain = ConstrainFor(accessor, AccessAction.Delete);
             var owned = new List<TKey>(targets.Count);
             foreach (var id in targets)
             {
                 var row = await Data<TEntity, TKey>.Get(id, context.CancellationToken);
-                if (row is not null && PassesRequestPredicates(row, constrain.Predicates)) owned.Add(id);
+                if (row is not null && PassesRequestPredicates(row, constrain!.Filter)) owned.Add(id);
             }
             targets = owned;
         }
@@ -822,7 +980,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         {
             // SEC-0004: a mass delete cannot exceed the principal's rows — AND the Constrain predicate into the
             // user's filter before it ever reaches the adapter (agent-safety).
-            filter = QueryFilterComposer.AndAll<TEntity>(filter, ConstrainFor(accessor, AccessAction.Delete).Predicates) ?? filter;
+            filter = Filter.And(filter, ConstrainFor(accessor, AccessAction.Delete).Filter) ?? filter;
         }
 
         var items = await Data<TEntity, TKey>.All(QueryDefinition.All.Where(filter), request.Context.CancellationToken);
@@ -855,8 +1013,9 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             // SEC-0004: a row-scoped entity must NOT truncate the table — bound by the delete constraint, falling
             // back to the read constraint ("delete all the rows I can see") so an author who scopes reads but
             // forgets Delete cannot accidentally truncate. Only an entity with NEITHER narrowing keeps RemoveAll.
-            var bound = QueryFilterComposer.AndAll<TEntity>(null, ConstrainFor(accessor, AccessAction.Delete).Predicates)
-                     ?? QueryFilterComposer.AndAll<TEntity>(null, ConstrainFor(accessor, AccessAction.Read).Predicates);
+            var bound = ConstrainFor(accessor, AccessAction.Delete).Filter
+                     ?? ConstrainFor(accessor, AccessAction.Read).Filter;
+            Filter.RequireRowOnly(bound, "DeleteAll access bound");
             if (bound is not null)
             {
                 var ids = (await Data<TEntity, TKey>.All(QueryDefinition.All.Where(bound), request.Context.CancellationToken))
@@ -896,6 +1055,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         context.Capabilities = Capabilities(repo);
 
         var hookContext = _hookPipeline.CreateContext(context);
+        var accessor = ResolveAccessor(context);
+        var constrain = accessor is null ? null : ConstrainFor(accessor, AccessAction.Update);
 
         if (!await _hookPipeline.BeforePatch(hookContext, request.Id?.ToString() ?? "", request.Patch!))
             return ModelShortCircuit(context, hookContext);
@@ -909,9 +1070,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         // SEC-0004: the existing row must be in scope (404 if not, existence-hiding); the same filter freezes
         // ownership on the patched copy below.
-        var accessor = ResolveAccessor(context);
-        var constrain = accessor is null ? null : ConstrainFor(accessor, AccessAction.Update);
-        if (constrain is not null && !PassesRequestPredicates(original, constrain.Predicates))
+        if (constrain is not null && !PassesRequestPredicates(original, constrain.Filter))
         {
             return new EntityModelResult<TEntity>(context, null, null, new NotFoundResult());
         }
@@ -993,22 +1152,67 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         return new EntityModelResult<TEntity>(context, saved, payload);
     }
 
-    // WEB-0068: evaluate hook-contributed read-visibility predicates against a single fetched model.
-    // Each predicate is the Expression<Func<TEntity, bool>> the developer wrote, compiled and invoked
-    // here — the ground truth of intent for a security gate. Mirrors QueryFilterComposer's type guard
-    // so a mistyped predicate fails the same way on the keyed-read path as on the collection path.
-    private static bool PassesRequestPredicates(TEntity model, IReadOnlyList<LambdaExpression> predicates)
+    private static bool PassesRequestPredicates(TEntity model, Filter? filter)
     {
-        if (predicates.Count == 0) return true;
-        foreach (var predicate in predicates)
+        Filter.RequireRowOnly(filter, "Row ownership or visibility evaluation");
+        return filter is null || InMemoryFilterEvaluator.Compile<TEntity>(filter)(model);
+    }
+
+    private static Func<bool> CaptureProjectionSources(EntityRequestContext context, QueryDefinition query,
+        IReadOnlyList<TEntity> rows, EndpointReadProof<TEntity, TKey>? proof)
+    {
+        if (proof is not null) return () => proof.IsValid(context, rows);
+        var selected = rows.ToArray();
+        var identities = rows.Select(row => row.Id).ToArray();
+        var request = EndpointReadProof<TEntity, TKey>.CaptureRequest(context, query);
+        return () => request.IsRequestUnchanged(context)
+            && rows.Count == selected.Length
+            && selected.Select((row, index) => ReferenceEquals(row, rows[index])
+                && EqualityComparer<TKey>.Default.Equals(identities[index], row.Id)).All(same => same);
+    }
+
+    private static bool IsFlatProjection(QueryOptions options)
+        => !options.IncludeRelationships && (string.IsNullOrWhiteSpace(options.Shape)
+            || string.Equals(options.Shape, "full", StringComparison.OrdinalIgnoreCase));
+
+    private static BadRequestObjectResult ProjectionShapeRejected() => new(new
+    {
+        error = "Source-bound projection supports flat collections. Remove map, dict, or relationship shaping from this request."
+    });
+
+    private static bool ProjectionKeySupported()
+        => typeof(TKey) == typeof(string) || typeof(TKey) == typeof(Guid)
+            || typeof(TKey) == typeof(byte) || typeof(TKey) == typeof(sbyte)
+            || typeof(TKey) == typeof(short) || typeof(TKey) == typeof(ushort)
+            || typeof(TKey) == typeof(int) || typeof(TKey) == typeof(uint)
+            || typeof(TKey) == typeof(long) || typeof(TKey) == typeof(ulong);
+
+    private static BadRequestObjectResult ProjectionKeyRejected() => new(new
+    {
+        error = "Source-bound projection requires an immutable string, Guid, or integral identity. This key type is not supported."
+    });
+
+    private ObjectResult ProjectionFailed(EntityRequestContext context, Exception exception)
+    {
+        context.Items.Remove(AccessProjection.ManifestKey);
+        context.Headers.Clear();
+        _logger?.LogError(exception, "The collection projection for {Entity} failed before response emission.", typeof(TEntity).Name);
+        return new ObjectResult(new
         {
-            var typed = predicate as Expression<Func<TEntity, bool>>
-                ?? throw new InvalidOperationException(
-                    $"QueryOptions.Predicates entry was {predicate?.GetType().FullName ?? "null"}, expected " +
-                    $"Expression<Func<{typeof(TEntity).FullName}, bool>>. Use QueryOptions.AddPredicate<TEntity>(...).");
-            if (!typed.Compile().Invoke(model)) return false;
-        }
-        return true;
+            code = KoanWebConstants.Codes.Read.ProjectionFailed,
+            error = "Source-bound projection failed before response emission. No partial view was returned."
+        }) { StatusCode = StatusCodes.Status500InternalServerError };
+    }
+
+    private static BadRequestObjectResult ReadEvidenceChanged(EntityRequestContext context)
+    {
+        context.Items.Remove(AccessProjection.ManifestKey);
+        context.Headers.Clear();
+        return new(new
+        {
+            code = KoanWebConstants.Codes.Read.EvidenceChanged,
+            message = "The returned identities or their authorization scope changed after the query. Preserve queried objects and scope in read hooks, or issue a new governed read."
+        });
     }
 
     private static ObjectResult InsertUnsupported() => new(new
@@ -1056,125 +1260,79 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
     private sealed class RepositoryQueryResult
     {
-        public RepositoryQueryResult(IReadOnlyList<TEntity> items, long total, bool handled, bool exceededLimit)
+        public RepositoryQueryResult(IReadOnlyList<TEntity> items, long total, bool handled, bool exceededLimit,
+            IQueryReadEvidence? readEvidence = null)
         {
             Items = items;
             Total = total;
             RepositoryHandledPagination = handled;
             ExceededSafetyLimit = exceededLimit;
+            ReadEvidence = readEvidence;
         }
 
         public IReadOnlyList<TEntity> Items { get; }
         public long Total { get; }
         public bool RepositoryHandledPagination { get; }
         public bool ExceededSafetyLimit { get; }
+        public IQueryReadEvidence? ReadEvidence { get; }
     }
 
-    private async Task<RepositoryQueryResult> QueryCollection(
-        EntityCollectionRequest request,
-        QueryOptions options,
-        CancellationToken cancellationToken)
+    private static QueryDefinition FreezeReadQuery(QueryDefinition query, string? filterJson,
+        bool ignoreCase, QueryOptions options)
     {
-        using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
-
-        Filter? userFilter = null;
-        if (!string.IsNullOrWhiteSpace(request.FilterJson))
+        options.Filter = Filter.Snapshot(options.Filter);
+        var userFilter = string.IsNullOrWhiteSpace(filterJson) ? null
+            : JsonFilterParser.Parse<TEntity>(filterJson, new FilterParseOptions { IgnoreCase = ignoreCase });
+        return query with
         {
-            userFilter = JsonFilterParser.Parse<TEntity>(request.FilterJson!, new FilterParseOptions { IgnoreCase = request.IgnoreCase });
-        }
+            Filter = Filter.Snapshot(Filter.And(userFilter, options.Filter)),
+            Sort = query.Sort.ToArray()
+        };
+    }
 
-        // WEB-0068: hook-contributed predicates AND-compose with the user's filter (all lowered to one
-        // Filter AST) so the adapter counts and pages against the already-filtered set. When any filter
-        // exists, free-text Q is dropped — Q reaches the raw provider surface only.
-        var composed = QueryFilterComposer.AndAll<TEntity>(userFilter, options.Predicates);
-        var queryDef = BuildQueryDefinition(request, options);
-        var absoluteMax = request.AbsoluteMaxRecords > 0 ? request.AbsoluteMaxRecords : (int?)null;
-
-        if (composed is null && !string.IsNullOrWhiteSpace(options.Q))
+    private async Task<RepositoryQueryResult> QueryCollection(QueryDefinition query, string? q,
+        int absoluteMaxRecords, CancellationToken cancellationToken)
+    {
+        using var partition = EntityContext.With(partition: query.Partition);
+        if (query.Filter is null && !string.IsNullOrWhiteSpace(q))
         {
-            var raw = await Data<TEntity, TKey>.QueryRaw(options.Q!, null, queryDef, cancellationToken);
+            var raw = await Data<TEntity, TKey>.QueryRaw(q, null, query, cancellationToken);
             return new RepositoryQueryResult(raw, raw.Count, false, false);
         }
-        if (composed is not null && !string.IsNullOrWhiteSpace(options.Q))
-        {
-            _logger?.LogInformation(
-                "EntityEndpointService<{Entity}> dropped free-text Q because IRequestOptionsHook(s) contributed {Count} predicate(s). See WEB-0068.",
-                typeof(TEntity).Name,
-                options.Predicates.Count);
-        }
+        if (query.Filter is not null && !string.IsNullOrWhiteSpace(q))
+            _logger?.LogInformation("EntityEndpointService<{Entity}> dropped free-text Q because the query has a normalized filter.", typeof(TEntity).Name);
 
-        var result = await Data<TEntity, TKey>.QueryWithCount(queryDef.Where(composed), cancellationToken, absoluteMax);
-
-        return new RepositoryQueryResult(result.Items, result.TotalCount, result.RepositoryHandledPagination, result.ExceededSafetyLimit);
+        var result = await Data<TEntity, TKey>.QueryWithCount(query, cancellationToken,
+            absoluteMaxRecords > 0 ? absoluteMaxRecords : null);
+        return new RepositoryQueryResult(result.Items, result.TotalCount, result.RepositoryHandledPagination,
+            result.ExceededSafetyLimit, result.ReadEvidence);
     }
 
     private static QueryDefinition BuildQueryDefinition(EntityCollectionRequest request, QueryOptions options)
     {
-        var def = QueryDefinition.All;
+        var query = QueryDefinition.All.ForPartition(request.Set).WithSort(options.Sort.ToArray());
         if (request.ApplyPagination && options.Page > 0 && options.PageSize > 0)
-            def = def.WithPagination(options.Page, options.PageSize);
-        if (!string.IsNullOrWhiteSpace(request.Set))
-            def = def.ForPartition(request.Set);
-        if (options.Sort.Count > 0)
-            def = def.WithSort(options.Sort);
-        return def;
+            query = query.WithPagination(options.Page, options.PageSize);
+        return query;
     }
-
-    private async Task<(IReadOnlyList<TEntity> Items, long Total)> QueryCollectionFromBody(
-        IDataRepository<TEntity, TKey> repo,
-        EntityQueryRequest request,
-        QueryOptions options,
-        CancellationToken cancellationToken)
-    {
-        using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
-
-        // Route body queries through the orchestrator (Data<T,K>.QueryWithCount) so the unified
-        // QueryDefinition contract handles split/residual/sort/paginate-after centrally.
-        var queryDef = QueryDefinition.All;
-        if (options.PageSize > 0 && options.Page > 0)
-            queryDef = queryDef.WithPagination(options.Page, options.PageSize);
-        if (!string.IsNullOrWhiteSpace(request.Set))
-            queryDef = queryDef.ForPartition(request.Set);
-        if (options.Sort.Count > 0)
-            queryDef = queryDef.WithSort(options.Sort);
-
-        Filter? userFilter = null;
-        if (!string.IsNullOrWhiteSpace(request.FilterJson))
-        {
-            userFilter = JsonFilterParser.Parse<TEntity>(request.FilterJson!, new FilterParseOptions { IgnoreCase = request.IgnoreCase });
-        }
-
-        // WEB-0068: same composition rule as the GET path — hook predicates AND with the user's
-        // filter (one Filter AST), free-text Q is dropped when any filter contributes.
-        var composed = QueryFilterComposer.AndAll<TEntity>(userFilter, options.Predicates);
-
-        if (composed is null && !string.IsNullOrWhiteSpace(options.Q))
-        {
-            var raw = await Data<TEntity, TKey>.QueryRaw(options.Q!, null, queryDef, cancellationToken);
-            return (raw, raw.Count);
-        }
-        if (composed is not null && !string.IsNullOrWhiteSpace(options.Q))
-        {
-            _logger?.LogInformation(
-                "EntityEndpointService<{Entity}> dropped free-text Q (body-query) because IRequestOptionsHook(s) contributed {Count} predicate(s). See WEB-0068.",
-                typeof(TEntity).Name,
-                options.Predicates.Count);
-        }
-
-        var result = await Koan.Data.Core.Data<TEntity, TKey>.QueryWithCount(queryDef.Where(composed), cancellationToken);
-        return (result.Items, result.TotalCount);
-    }
-
     // WEB-0068 / AN-leak: collection ?with=all expands each row's relationships through the SAME governed
     // path as the keyed read — every related entity is gated by its own type's visibility predicates.
     // Scope the partition explicitly: the QueryCollection partition scope has already disposed by here.
-    private static async Task<IReadOnlyList<object>> EnrichRelationships(IReadOnlyList<TEntity> list, EntityRequestContext context, string? set)
+    private static async Task<IReadOnlyList<object>> EnrichRelationships(IReadOnlyList<TEntity> list, EntityRequestContext context, string? set,
+        ICollection<Func<bool>> retainedEvidence)
     {
-        using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(set) ? null : set);
+        using var _ = EntityContext.With(partition: set);
         if (list.Count == 0) return Array.Empty<object>();
         if (list.Any(item => item is not Entity<TEntity, TKey>)) return list.Cast<object>().ToArray();
         var roots = list.Select(item => (item, item.Id)).ToArray();
-        var enriched = await GovernedRelationshipExpander.ExpandManyAsync<TEntity, TKey>(roots, context);
+        var checks = new List<Func<bool>>();
+        var enriched = await GovernedRelationshipExpander.ExpandManyAsync<TEntity, TKey>(roots, context, checks);
+        foreach (var check in checks)
+            retainedEvidence.Add(() =>
+            {
+                using var partition = EntityContext.With(partition: set);
+                return check();
+            });
         return enriched.Cast<object>().ToArray();
     }
 
@@ -1292,10 +1450,14 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         return null;
     }
 
-    private static EntityCollectionResult<TEntity> CollectionShortCircuit(EntityRequestContext context, HookContext<TEntity> hookContext)
+    private static EntityCollectionResult<TEntity> CollectionShortCircuit(EntityRequestContext context, HookContext<TEntity> hookContext, bool requiresProof = false)
     {
         CopyHookHeaders(context, hookContext);
         var shortCircuit = hookContext.ShortCircuitPayload;
+        if ((requiresProof || Filter.HasCounterpart(context.Options.Filter)) && !IsDenial(shortCircuit))
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
+        if ((requiresProof || Filter.HasCounterpart(context.Options.Filter)) && shortCircuit is ObjectResult { StatusCode: >= 400 } denial)
+            shortCircuit = new StatusCodeResult(denial.StatusCode.Value);
         if (shortCircuit is IActionResult action)
         {
             return new EntityCollectionResult<TEntity>(context, [], 0, null, action);
@@ -1303,16 +1465,24 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         return new EntityCollectionResult<TEntity>(context, [], 0, shortCircuit, shortCircuit);
     }
 
-    private static EntityModelResult<TEntity> ModelShortCircuit(EntityRequestContext context, HookContext<TEntity> hookContext)
+    private static EntityModelResult<TEntity> ModelShortCircuit(EntityRequestContext context, HookContext<TEntity> hookContext, bool requiresProof = false)
     {
         CopyHookHeaders(context, hookContext);
         var shortCircuit = hookContext.ShortCircuitPayload;
+        if ((requiresProof || Filter.HasCounterpart(context.Options.Filter)) && !IsDenial(shortCircuit))
+            return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
+        if ((requiresProof || Filter.HasCounterpart(context.Options.Filter)) && shortCircuit is ObjectResult { StatusCode: >= 400 } denial)
+            shortCircuit = new StatusCodeResult(denial.StatusCode.Value);
         if (shortCircuit is IActionResult action)
         {
             return new EntityModelResult<TEntity>(context, default, null, action);
         }
         return new EntityModelResult<TEntity>(context, default, shortCircuit, shortCircuit);
     }
+
+    private static bool IsDenial(object? result)
+        => result is StatusCodeResult { StatusCode: >= 400 }
+            or ObjectResult { StatusCode: >= 400 } or ForbidResult or ChallengeResult;
 
 }
 

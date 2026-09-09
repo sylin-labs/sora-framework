@@ -360,3 +360,17 @@ Existing numeric rows or columns require a separate, explicit migration; upgrade
 Entity JSON hydration replaces constructor-seeded members with stored collections. Additive domain collections
 with public parameterless constructors and Add(T) round-trip as arrays; a nonempty constructor also needs public
 Clear() so hydration cannot duplicate its defaults. Unsupported shapes fail with a corrective error.
+## Counterpart query execution
+
+RepositoryFacade binds QueryDefinition.Partition before read scope and dispatch. For counterpart
+queries it captures segmentation and legacy managed equality values once per operand, compares
+isolation and route bindings, folds target read contributors, and captures the provider target
+inside that target context. Target contexts end before native outer dispatch. Native execution
+and reverse-order lease disposal remain inside the same async binding lifetime; operation leases
+are not reactivated across async contexts. Nested counterparts and complete-filter residuals reject.
+
+The existing facade IQueryRepository.Query entry uses the shared planner and receipt finalizer,
+including no-count keyed reads. Data's raw candidate boundary avoids duplicate planning. Native
+counterpart receipts carry execution-local evidence. Load lifecycle, relationship materialization,
+and streams verify returned row references/identities and Data scope before release. Evidence does
+not establish a shared count/page snapshot or permission for rows added by later Web hooks.

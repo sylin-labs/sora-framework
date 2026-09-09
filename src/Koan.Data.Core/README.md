@@ -226,3 +226,14 @@ Queries use the same spelling. Ordinary enum ordering uses declared ordinal rank
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
 Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+## Counterpart reads
+
+Use `Entity.AllWithCount(QueryDefinition.All.Where(Filter.SameIdIn<T>(policy, "")))`
+when content must have an eligible same-ID counterpart in the default partition. Set the
+content partition on QueryDefinition. Ordinary lambda and JSON query overloads AND their
+predicate with the structured filter. QueryStream accepts QueryDefinition for the same
+provider-bounded path. Both operands retain Data source and isolation guards; unsupported
+native shapes reject. Count and page share predicate meaning, not a transactional snapshot.
+
+Explicit empty partitions select default in structured reads and positional Entity Get/GetMany
+helpers; null retains the ambient partition. The caller's scope is restored after execution.

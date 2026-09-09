@@ -169,3 +169,19 @@ returns the submitted entity with its assigned key and Inserted/Committed. A pro
 Conflict/NotCommitted with the submitted key and no entity. It never loads or returns the existing row.
 Unsupported shape, unrelated constraint errors, cancellation after dispatch, and uncertain commit must
 not become collision receipts. `DataCaps.Write.InsertOnly` is shape-qualified by the selected repository.
+## Counterpart query contract
+
+SameIdInFilter is a logical same-Entity identity relationship. Data replaces it with a
+BoundSameIdInFilter containing a scoped predicate and opaque provider target captured under
+the guarded target context. ICounterpartQueryRepository binds that target without candidate
+reads. FilterSupport.SupportsSameIdIn defaults false, including FilterSupport.Full.
+Filter.Snapshot owns operand/path/set collections and clones binary atoms. Ordinary row-only
+filters preserve existing opaque provider scalar behavior. Counterpart trees and their isolation
+scopes require supported immutable or copied atoms; unsupported opaque values reject before
+provider dispatch. DateTime equivalence preserves its binary representation, including kind and
+ambiguous local state. ClrFilter remains explicitly opaque and cannot enter a counterpart query. IQueryReadEvidence is operation-local Data
+evidence for returned row identities, references, routes, partitions, and scope; it is not
+a reusable permission or provider snapshot-isolation receipt.
+
+ReadEvidence metadata is ignored by System.Text.Json and by serializers honoring IgnoreDataMember,
+including the default Newtonsoft.Json contract. It must not be exposed as application JSON.

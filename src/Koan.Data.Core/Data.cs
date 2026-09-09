@@ -107,6 +107,8 @@ public static class Data<TEntity, TKey>
         int? absoluteMaxRecords = null)
     {
         if (absoluteMaxRecords is < 0) throw new ArgumentOutOfRangeException(nameof(absoluteMaxRecords));
+        using var partition = EntityContext.With(partition: query.Partition);
+        query = query with { Filter = Filter.Snapshot(query.Filter), Sort = query.Sort.ToArray() };
         var repo = Repo;
         var q = repo as IQueryRepository<TEntity, TKey> ?? RequireQuery(repo);
         var filterSupport = ResolveFilterSupport(repo);
@@ -161,11 +163,13 @@ public static class Data<TEntity, TKey>
             return Exceeded(finalized.TotalCount, finalized.IsEstimate);
 
         await DataQueryExecution<TEntity, TKey>.MaterializeVisible(repo, finalized.Page, ct);
+        DataQueryExecution<TEntity, TKey>.ValidateEvidence(adapterResult.ReadEvidence, finalized.Page);
 
         if (!hasPagination)
         {
             return new QueryResult<TEntity>
             {
+                ReadEvidence = adapterResult.ReadEvidence,
                 Items = finalized.Page,
                 TotalCount = finalized.TotalCount,
                 Page = 1,
@@ -178,6 +182,7 @@ public static class Data<TEntity, TKey>
 
         return new QueryResult<TEntity>
         {
+            ReadEvidence = adapterResult.ReadEvidence,
             Items = finalized.Page,
             TotalCount = finalized.TotalCount,
             Page = query.EffectivePage(),
@@ -202,6 +207,8 @@ public static class Data<TEntity, TKey>
 
     private static async Task<long> CountCore(QueryDefinition query, CountStrategy strategy, CancellationToken ct)
     {
+        using var partition = EntityContext.With(partition: query.Partition);
+        query = query with { Filter = Filter.Snapshot(query.Filter), Sort = query.Sort.ToArray() };
         var repo = Repo;
         var q = RequireQuery(repo);
         var filterSupport = ResolveFilterSupport(repo);
@@ -267,7 +274,7 @@ public static class Data<TEntity, TKey>
     // Query — entity-first DX: LINQ predicate / DSL string / QueryDefinition
     // ------------------------------------------------------------------
     public static Task<QueryResult<TEntity>> QueryWithCount(Expression<Func<TEntity, bool>> predicate, QueryDefinition? query = null, CancellationToken ct = default, int? absoluteMaxRecords = null)
-        => QueryWithCount((query ?? QueryDefinition.All).Where(Lower(predicate)), ct, absoluteMaxRecords);
+        => QueryWithCount((query ?? QueryDefinition.All).Where(Filter.And(query?.Filter, Lower(predicate))), ct, absoluteMaxRecords);
 
     public static Task<IReadOnlyList<TEntity>> Query(Expression<Func<TEntity, bool>> predicate, CancellationToken ct = default)
         => Query(predicate, (QueryDefinition?)null, ct);
@@ -291,17 +298,21 @@ public static class Data<TEntity, TKey>
     public static Task<IReadOnlyList<TEntity>> Query(string filterJson, QueryDefinition? query, CancellationToken ct = default)
     {
         var filter = JsonFilterParser.Parse<TEntity>(filterJson);
-        return All((query ?? QueryDefinition.All).Where(filter), ct);
+        return All((query ?? QueryDefinition.All).Where(Filter.And(query?.Filter, filter)), ct);
     }
 
     public static Task<QueryResult<TEntity>> QueryWithCount(string filterJson, QueryDefinition? query = null, CancellationToken ct = default, int? absoluteMaxRecords = null)
     {
         var filter = JsonFilterParser.Parse<TEntity>(filterJson);
-        return QueryWithCount((query ?? QueryDefinition.All).Where(filter), ct, absoluteMaxRecords);
+        return QueryWithCount((query ?? QueryDefinition.All).Where(Filter.And(query?.Filter, filter)), ct, absoluteMaxRecords);
     }
 
     public static IAsyncEnumerable<TEntity> QueryStream(string filterJson, int? batchSize = null, CancellationToken ct = default)
         => QueryStreamCore(JsonFilterParser.Parse<TEntity>(filterJson), sortSpecs: null, batchSize, ct);
+
+    /// <summary>Stream one structured query using provider-bounded candidate pages.</summary>
+    public static IAsyncEnumerable<TEntity> QueryStream(QueryDefinition query, int? batchSize = null, CancellationToken ct = default)
+        => StreamCore(query ?? throw new ArgumentNullException(nameof(query)), batchSize, ct);
 
     [System.Runtime.CompilerServices.OverloadResolutionPriority(1)]
     public static IAsyncEnumerable<TEntity> QueryStream(string filterJson, CancellationToken ct)
@@ -553,6 +564,8 @@ public static class Data<TEntity, TKey>
         int? batchSize,
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
+        using var partition = EntityContext.With(partition: query.Partition);
+        query = query with { Filter = Filter.Snapshot(query.Filter), Sort = query.Sort.ToArray() };
         var dataService = Service; // Preserve the standard missing/disposed-host failure contract.
         var services = AppHost.Current!;
         var capturedDataContext = EntityContext.Current;
@@ -625,6 +638,7 @@ public static class Data<TEntity, TKey>
 
     private static async Task<IReadOnlyList<TEntity>> PageCore(int page, int size, QueryDefinition query, CancellationToken ct)
     {
+        using var partition = EntityContext.With(partition: query.Partition);
         if (page <= 0) throw new System.ArgumentOutOfRangeException(nameof(page));
         if (size <= 0) throw new System.ArgumentOutOfRangeException(nameof(size));
         var requested = query.WithPagination(page, size).WithCountStrategy(null);
@@ -635,6 +649,7 @@ public static class Data<TEntity, TKey>
         var adapterResult = await DataQueryExecution<TEntity, TKey>.QueryCandidates(repo, q, adapterQuery, ct);
         var pageResult = FilterPushdownCoordinator.Finalize(requested, adapterQuery, residual, adapterResult).Page;
         await DataQueryExecution<TEntity, TKey>.MaterializeVisible(repo, pageResult, ct);
+        DataQueryExecution<TEntity, TKey>.ValidateEvidence(adapterResult.ReadEvidence, pageResult);
         return pageResult;
     }
 
@@ -642,7 +657,7 @@ public static class Data<TEntity, TKey>
     // Partition-scoped helpers (ambient via EntityContext)
     // ------------------------------------------------------------------
     public static IDisposable WithPartition(string? partition) =>
-        string.IsNullOrEmpty(partition) ? NoOpDisposable.Instance : EntityContext.Partition(partition);
+        partition is null ? NoOpDisposable.Instance : EntityContext.Partition(partition);
 
     public static Task<TEntity?> Get(TKey id, string partition, CancellationToken ct = default)
     { using var _ = WithPartition(partition); return Repo.Get(id, ct); }

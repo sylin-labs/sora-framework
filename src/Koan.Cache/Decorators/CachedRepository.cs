@@ -23,6 +23,7 @@ namespace Koan.Cache.Decorators;
 internal sealed class CachedRepository<TEntity, TKey> :
     IDataRepository<TEntity, TKey>,
     IInsertOnlyRepository<TEntity, TKey>,
+    ICounterpartQueryRepository,
     IQueryRepository<TEntity, TKey>,
     IRawQueryRepository<TEntity, TKey>,
     IDescribesCapabilities,
@@ -30,6 +31,11 @@ internal sealed class CachedRepository<TEntity, TKey> :
     where TEntity : class, IEntity<TKey>
     where TKey : notnull
 {
+    public CounterpartQueryTarget BindCounterpartTarget()
+        => _inner is ICounterpartQueryRepository native
+            ? native.BindCounterpartTarget()
+            : throw new NotSupportedException("The cached connector cannot bind counterpart query targets.");
+
     private readonly IDataRepository<TEntity, TKey> _inner;
     private readonly IQueryRepository<TEntity, TKey>? _query;
     private readonly IRawQueryRepository<TEntity, TKey>? _rawQuery;

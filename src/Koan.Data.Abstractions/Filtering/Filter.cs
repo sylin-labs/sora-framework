@@ -17,6 +17,104 @@ namespace Koan.Data.Abstractions.Filtering;
 /// </summary>
 public abstract record Filter
 {
+    /// <summary>Require the same identity in another partition to satisfy the supplied predicate.</summary>
+    public static Filter SameIdIn<TEntity>(Expression<Func<TEntity, bool>> predicate, string? partition)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        return new SameIdInFilter(typeof(TEntity), Snapshot(LinqFilterCompiler.Compile(predicate), requireImmutableValues: true)!, partition);
+    }
+
+    /// <summary>Whether this tree requires a provider-bound counterpart read.</summary>
+    public static bool HasCounterpart(Filter? filter) => filter switch
+    {
+        SameIdInFilter or BoundSameIdInFilter => true,
+        AllOf all => all.Operands.Any(HasCounterpart),
+        AnyOf any => any.Operands.Any(HasCounterpart),
+        Not not => HasCounterpart(not.Operand),
+        _ => false
+    };
+
+    /// <summary>Reject a database relationship where only an in-memory row predicate can be honored.</summary>
+    public static void RequireRowOnly(Filter? filter, string operation)
+    {
+        if (HasCounterpart(filter))
+            throw new NotSupportedException($"{operation} cannot enforce a counterpart predicate. Use a supported structured read; counterpart mutations are not supported.");
+    }
+
+    /// <summary>Compose optional predicates without introducing an empty conjunction.</summary>
+    public static Filter? And(Filter? left, Filter? right)
+        => left is null ? right : right is null ? left : All(left, right);
+
+    /// <summary>Copy AST collections and binary values. Counterpart proofs reject opaque provider values;
+    /// ordinary row filters retain their existing adapter scalar and CLR semantics.</summary>
+    public static Filter? Snapshot(Filter? filter, bool requireImmutableValues = false)
+        => SnapshotCore(filter, requireImmutableValues || HasCounterpart(filter));
+
+    private static Filter? SnapshotCore(Filter? filter, bool strict) => filter switch
+    {
+        AllOf all => new AllOf(Array.AsReadOnly(all.Operands.Select(item => SnapshotCore(item, strict)!).ToArray())),
+        AnyOf any => new AnyOf(Array.AsReadOnly(any.Operands.Select(item => SnapshotCore(item, strict)!).ToArray())),
+        Not not => new Not(SnapshotCore(not.Operand, strict)!),
+        FieldFilter field => field with
+        {
+            Field = field.Field with { Segments = Array.AsReadOnly(field.Field.Segments.ToArray()) },
+            Value = field.Value switch
+            {
+                FilterValue.Set set => new FilterValue.Set(Array.AsReadOnly(set.Values.Select(value => SnapshotAtom(value, strict)).ToArray())),
+                FilterValue.Scalar scalar => new FilterValue.Scalar(SnapshotAtom(scalar.Value, strict)),
+                _ => field.Value
+            }
+        },
+        SameIdInFilter same => same with { Predicate = SnapshotCore(same.Predicate, true)! },
+        BoundSameIdInFilter bound => bound with { Predicate = SnapshotCore(bound.Predicate, true)! },
+        _ => filter
+    };
+
+    /// <summary>Structural equality for normalized snapshots, including owned operand and value collections.</summary>
+    public static bool Equivalent(Filter? left, Filter? right)
+    {
+        if (ReferenceEquals(left, right)) return true;
+        return (left, right) switch
+        {
+            (AllOf a, AllOf b) => SameOperands(a.Operands, b.Operands),
+            (AnyOf a, AnyOf b) => SameOperands(a.Operands, b.Operands),
+            (Not a, Not b) => Equivalent(a.Operand, b.Operand),
+            (FieldFilter a, FieldFilter b) => a.Operator == b.Operator && a.IgnoreCase == b.IgnoreCase &&
+                a.Field.ManagedClrType == b.Field.ManagedClrType && a.Field.Segments.SequenceEqual(b.Field.Segments) &&
+                (a.Value is FilterValue.Set sa && b.Value is FilterValue.Set sb
+                    ? SameValues(sa.Values, sb.Values) : a.Value is FilterValue.Scalar va && b.Value is FilterValue.Scalar vb ? EquivalentValue(va.Value, vb.Value) : Equals(a.Value, b.Value)),
+            (SameIdInFilter a, SameIdInFilter b) => a.EntityType == b.EntityType && a.Partition == b.Partition && Equivalent(a.Predicate, b.Predicate),
+            (BoundSameIdInFilter a, BoundSameIdInFilter b) => Equals(a.Target, b.Target) && Equivalent(a.Predicate, b.Predicate),
+            (ClrFilter a, ClrFilter b) => ReferenceEquals(a.Predicate, b.Predicate),
+            _ => false
+        };
+    }
+
+    private static bool SameOperands(IReadOnlyList<Filter> left, IReadOnlyList<Filter> right)
+        => left.Count == right.Count && left.Zip(right).All(pair => Equivalent(pair.First, pair.Second));
+
+    private static bool SameValues(IReadOnlyList<object?> left, IReadOnlyList<object?> right)
+        => left.Count == right.Count && left.Zip(right).All(pair => EquivalentValue(pair.First, pair.Second));
+
+    /// <summary>Conservative native atom equivalence shared by query and isolation snapshots.</summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public static bool EquivalentValue(object? left, object? right)
+        => (left, right) switch
+        {
+            (byte[] a, byte[] b) => a.AsSpan().SequenceEqual(b),
+            (DateTime a, DateTime b) => a.ToBinary() == b.ToBinary(),
+            _ => Equals(left, right)
+        };
+
+    private static object? SnapshotAtom(object? value, bool strict)
+    {
+        if (value is null or string or decimal or Guid or DateTime or DateTimeOffset or TimeSpan or DateOnly or TimeOnly ||
+            value.GetType().IsPrimitive || value.GetType().IsEnum) return value;
+        if (value is byte[] bytes) return bytes.ToArray();
+        if (!strict) return value;
+        throw new NotSupportedException($"Counterpart filter snapshots cannot capture mutable or unsupported '{value.GetType().Name}' values. Use immutable scalar values or a set of immutable scalar values.");
+    }
+
     /// <summary>Conjunction builder — every operand must match.</summary>
     public static Filter All(params Filter[] operands) => new AllOf(operands);
 

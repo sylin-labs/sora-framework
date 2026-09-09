@@ -1,4 +1,4 @@
-using System.Linq.Expressions;
+using Koan.Data.Abstractions.Filtering;
 using Koan.Data.Abstractions.Sorting;
 
 namespace Koan.Web.Hooks;
@@ -8,6 +8,8 @@ namespace Koan.Web.Hooks;
 /// </summary>
 public sealed class QueryOptions
 {
+    /// <summary>The normalized relationship expansion choice shared by endpoint and emit hooks.</summary>
+    public bool IncludeRelationships { get; set; }
     public string? Q { get; set; }
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = Infrastructure.KoanWebConstants.Defaults.DefaultPageSize;
@@ -23,19 +25,9 @@ public sealed class QueryOptions
     public Dictionary<string, string> Extras { get; } = new();
 
     /// <summary>
-    /// Additive server-side predicates contributed by <see cref="IRequestOptionsHook{TEntity}"/>
-    /// implementations. AND-composed with the user's <c>?filter=</c> at query-execution time so the
-    /// adapter counts and pages against the already-filtered set — see WEB-0068.
-    /// <para>
-    /// Each entry is an <see cref="Expression{TDelegate}"/> typed
-    /// <c>Func&lt;TEntity, bool&gt;</c> for the request's entity. Add via
-    /// <see cref="QueryOptionsExtensions.AddPredicate{TEntity}"/> so the lambda type is enforced
-    /// at compile time.
-    /// </para>
-    /// <para>
-    /// When this list is non-empty, <see cref="Q"/> is dropped — the free-text and predicate
-    /// paths reach different repository surfaces and can't be composed at the framework layer.
-    /// </para>
+    /// Complete normalized server constraint, AND-composed with the user's filter before execution.
+    /// AddPredicate lowers recognized captured values when contributed. Null means unconstrained.
+    /// When a filter exists, free-text Q is dropped because that separate provider input cannot be composed.
     /// </summary>
-    public List<LambdaExpression> Predicates { get; } = new();
+    public Filter? Filter { get; set; }
 }

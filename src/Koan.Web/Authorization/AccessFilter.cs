@@ -2,24 +2,24 @@ using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
+using Koan.Data.Abstractions.Filtering;
 
 namespace Koan.Web.Authorization;
 
 /// <summary>
 /// SEC-0004 (§B) — the default <see cref="IAccessFilter{TEntity}"/> accumulator. The endpoint creates one, passes
-/// it to <c>EntityAccess&lt;T&gt;.Constrain</c> (which appends via <see cref="Where"/>/<see cref="Stamp{TProp}"/>),
-/// then reads <see cref="Predicates"/> (narrow / verify / bound) and applies <see cref="ApplyStamps"/> (create /
+/// it to <c>EntityAccess&lt;T&gt;.Constrain</c> (which appends via <c>Where</c>/<see cref="Stamp{TProp}"/>),
+/// then reads <see cref="Filter"/> (narrow / verify / bound) and applies <see cref="ApplyStamps"/> (create /
 /// update). Mutable and single-use per request.
 /// </summary>
 public sealed class AccessFilter<TEntity> : IAccessFilter<TEntity>
 {
-    private readonly List<Expression<Func<TEntity, bool>>> _predicates = new();
     private readonly List<Action<TEntity>> _stamps = new();
 
     /// <summary>A fresh empty accumulator (e.g. the read path, which only collects predicates).</summary>
     public static AccessFilter<TEntity> Empty => new();
 
-    public IReadOnlyList<Expression<Func<TEntity, bool>>> Predicates => _predicates;
+    public Filter? Filter { get; private set; }
 
     /// <summary>True when at least one server-truth stamp is pending (create/update wrote the owner).</summary>
     internal bool HasStamps => _stamps.Count > 0;
@@ -27,7 +27,16 @@ public sealed class AccessFilter<TEntity> : IAccessFilter<TEntity>
     public IAccessFilter<TEntity> Where(Expression<Func<TEntity, bool>> predicate)
     {
         ArgumentNullException.ThrowIfNull(predicate);
-        _predicates.Add(predicate);
+        Filter = Koan.Data.Abstractions.Filtering.Filter.And(Filter,
+            Koan.Data.Abstractions.Filtering.Filter.Snapshot(LinqFilterCompiler.Compile(predicate)));
+        return this;
+    }
+
+    public IAccessFilter<TEntity> Where(Expression<Func<TEntity, bool>> predicate, string? partition)
+    {
+        Filter = Koan.Data.Abstractions.Filtering.Filter.And(Filter,
+            Koan.Data.Abstractions.Filtering.Filter.Snapshot(
+                Koan.Data.Abstractions.Filtering.Filter.SameIdIn(predicate, partition)));
         return this;
     }
 

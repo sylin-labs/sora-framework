@@ -24,6 +24,7 @@ internal sealed class MongoRepository<TEntity, TKey> :
     IOptimizedDataRepository<TEntity, TKey>,
     IConditionalWriteRepository<TEntity, TKey>,
     IInsertOnlyRepository<TEntity, TKey>,
+    ICounterpartQueryRepository,
     IInstructionExecutor<TEntity>,
     IDescribesCapabilities,
     IBulkUpsert<TKey>,
@@ -52,7 +53,7 @@ internal sealed class MongoRepository<TEntity, TKey> :
         _route = route;
         _clients = clients;
         _entity = new MongoEntityPlan<TEntity, TKey>(services, route.Source, mapping);
-        _queries = new MongoQueryCompiler<TEntity, TKey>(_entity);
+        _queries = new MongoQueryCompiler<TEntity, TKey>(_entity, ResolveCounterpart);
         _schema = new MongoSchema<TEntity, TKey>(route, clients, _entity,
             services.GetRequiredService<ILogger<MongoSchema<TEntity, TKey>>>());
 
@@ -68,11 +69,38 @@ internal sealed class MongoRepository<TEntity, TKey> :
 
     public void Describe(ICapabilities capabilities)
     {
-        MongoFeatures.Describe(capabilities);
+        MongoFeatures.Describe(capabilities, SupportsCounterpart);
         if (!_entity.IsMapped) capabilities.Add(DataCaps.Write.InsertOnly);
     }
 
     public Task EnsureReady(CancellationToken ct = default) => _schema.Ensure(CollectionName(), ct);
+
+    public CounterpartQueryTarget BindCounterpartTarget()
+    {
+        if (!SupportsCounterpart)
+            throw new NotSupportedException("MongoDB counterpart queries require ordinary managed _id storage with string, Guid, or integral keys. Explicit mappings and other key types are unsupported.");
+        return new NativeCounterpartTarget(typeof(TEntity), _route, CollectionName());
+    }
+
+    private string ResolveCounterpart(CounterpartQueryTarget target)
+    {
+        if (!SupportsCounterpart || target is not NativeCounterpartTarget native ||
+            native.EntityType != typeof(TEntity) || native.Route != _route)
+            throw new NotSupportedException("MongoDB counterpart target must bind the same managed Entity, identity codec, and source/database route.");
+        return native.Collection;
+    }
+
+    // These key values cannot mutate behind the Data result's captured identity evidence.
+    private bool SupportsCounterpart => !_entity.IsMapped &&
+        (typeof(TKey) == typeof(string) || typeof(TKey) == typeof(Guid) ||
+         typeof(TKey) == typeof(byte) || typeof(TKey) == typeof(sbyte) ||
+         typeof(TKey) == typeof(short) || typeof(TKey) == typeof(ushort) ||
+         typeof(TKey) == typeof(int) || typeof(TKey) == typeof(uint) ||
+         typeof(TKey) == typeof(long) || typeof(TKey) == typeof(ulong));
+
+    // The nested generic type binds both Entity and key shape. The route is never rendered in diagnostics.
+    private sealed record NativeCounterpartTarget(Type EntityType, MongoRoute Route, string Collection)
+        : CounterpartQueryTarget(EntityType);
 
     public async Task<TEntity?> Get(TKey id, CancellationToken ct = default)
     {
@@ -202,7 +230,7 @@ internal sealed class MongoRepository<TEntity, TKey> :
         var collection = await Collection(ct).ConfigureAwait(false);
         long? total = null;
         if (plan.CountExecution != CountExecutionKind.None)
-            total = await collection.CountDocumentsAsync(plan.Filter, cancellationToken: ct).ConfigureAwait(false);
+            total = await CountNative(collection, plan, ct).ConfigureAwait(false);
         var items = await Read(collection, plan, ct).ConfigureAwait(false);
         return new RepositoryQueryResult<TEntity>
         {
@@ -220,8 +248,7 @@ internal sealed class MongoRepository<TEntity, TKey> :
         var counted = query.WithoutPagination().WithCountStrategy(CountStrategy.Exact);
         var plan = _queries.Compile(counted);
         var collection = await Collection(ct).ConfigureAwait(false);
-        return CountResult.Exact(await collection.CountDocumentsAsync(plan.Filter, cancellationToken: ct)
-            .ConfigureAwait(false));
+        return CountResult.Exact(await CountNative(collection, plan, ct).ConfigureAwait(false));
     }
 
     public async Task<BoundedQueryResult<TEntity>> QueryBoundedCandidates(
@@ -360,7 +387,7 @@ internal sealed class MongoRepository<TEntity, TKey> :
         MongoQueryPlan plan,
         CancellationToken ct)
     {
-        if (plan.Computed is not null)
+        if (plan.Prefix is not null || plan.Computed is not null)
             return await ReadPipeline(collection, plan, ct).ConfigureAwait(false);
 
         var find = collection.Find(plan.Filter);
@@ -384,24 +411,39 @@ internal sealed class MongoRepository<TEntity, TKey> :
         MongoQueryPlan plan,
         CancellationToken ct)
     {
-        var stages = new List<BsonDocument>(6)
-        {
-            new("$match", plan.FilterDocument),
-            new("$addFields", plan.Computed)
-        };
+        var stages = plan.Prefix?.ToList() ?? [new("$match", plan.FilterDocument)];
+        if (plan.Computed is not null) stages.Add(new BsonDocument("$addFields", plan.Computed));
         if (plan.SortDocument is not null) stages.Add(new BsonDocument("$sort", plan.SortDocument));
         if (plan.Skip != 0) stages.Add(new BsonDocument("$skip", plan.Skip));
         if (plan.Limit is { } limit) stages.Add(new BsonDocument("$limit", limit));
 
-        var hide = new BsonDocument();
-        foreach (var element in plan.Computed!) hide[element.Name] = 0;
-        stages.Add(new BsonDocument("$project", hide));
+        if (plan.Prefix is not null)
+            stages.Add(new BsonDocument("$replaceRoot", new BsonDocument("newRoot", "$" + MongoQueryCompiler<TEntity, TKey>.Envelope)));
+        else
+        {
+            var hide = new BsonDocument();
+            foreach (var element in plan.Computed!) hide[element.Name] = 0;
+            stages.Add(new BsonDocument("$project", hide));
+        }
 
         var documents = await collection
             .Aggregate<BsonDocument>(PipelineDefinition<BsonDocument, BsonDocument>.Create(stages),
                 cancellationToken: ct)
             .ToListAsync(ct).ConfigureAwait(false);
         return documents.Select(_entity.Read).ToArray();
+    }
+
+    private static async Task<long> CountNative(IMongoCollection<BsonDocument> collection,
+        MongoQueryPlan plan, CancellationToken ct)
+    {
+        if (plan.Prefix is null)
+            return await collection.CountDocumentsAsync(plan.Filter, cancellationToken: ct).ConfigureAwait(false);
+        var stages = plan.Prefix.ToList();
+        stages.Add(new BsonDocument("$count", "count"));
+        var result = await collection.Aggregate<BsonDocument>(
+            PipelineDefinition<BsonDocument, BsonDocument>.Create(stages), cancellationToken: ct)
+            .SingleOrDefaultAsync(ct).ConfigureAwait(false);
+        return result is null ? 0 : result["count"].ToInt64();
     }
 
     private async Task Replace(

@@ -14,6 +14,11 @@ public static class KoanWebConstants
 
     public static class Codes
     {
+        public static class Read
+        {
+            public const string EvidenceChanged = "web.read.evidenceChanged";
+            public const string ProjectionFailed = "web.read.projectionFailed";
+        }
         public static class Mutation
         {
             public const string InsertUnsupported = "web.mutation.insertUnsupported";

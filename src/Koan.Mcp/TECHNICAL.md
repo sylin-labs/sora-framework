@@ -13,6 +13,18 @@ loader. Related-type visibility, backend negotiation, result/candidate limits, a
 rejections therefore match REST. The selected or rejected child-edge strategy is inspectable through
 `koan://facts`. Runtime facts are a latest-state snapshot, not an operation history.
 
+The same boundary carries normalized `Filter` access constraints, including `Where(predicate,
+partition: "")` counterpart authority, through collection, body-query, keyed and relationship reads.
+Counts and per-row access metadata describe the authorized result from that execution. MCP does not
+compile a replica predicate or rebuild a second read decision. Unsupported providers and changed read
+evidence produce the shared corrective result. These reads do not authorize mutations or guarantee that
+moderation cannot change after the query. See [Web's constraint contract](../Koan.Web/TECHNICAL.md#normalized-read-constraints-and-counterpart-authority).
+
+Source-bound `EmitDecision.Project(rows, mapper)` views use the same endpoint checks and per-row access
+manifest. Collection and Query tools return the mapped view without a second MCP projection or policy
+decision. Normalized `QueryOptions.Shape` and `IncludeRelationships` let application emit hooks choose
+`Next` for framework shapes on either transport. A mapping failure returns no partial view.
+
 ## What this package composes
 
 Discovery supplies the surface -- `[McpEntity]` entities and `[McpTool]` workflows -- and the caller's

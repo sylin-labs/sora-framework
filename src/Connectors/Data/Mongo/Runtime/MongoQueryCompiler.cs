@@ -8,16 +8,57 @@ using MongoDB.Driver;
 
 namespace Koan.Data.Connector.Mongo.Runtime;
 
-internal sealed class MongoQueryCompiler<TEntity, TKey>(MongoEntityPlan<TEntity, TKey> entity)
+internal sealed class MongoQueryCompiler<TEntity, TKey>(MongoEntityPlan<TEntity, TKey> entity,
+    Func<CounterpartQueryTarget, string>? resolveCounterpart = null)
     where TEntity : class, IEntity<TKey>
     where TKey : notnull
 {
     public MongoQueryPlan Compile(QueryDefinition query, int? hardLimit = null)
     {
         ArgumentNullException.ThrowIfNull(query);
-        var filter = query.Filter is null ? new BsonDocument() : Visit(query.Filter);
-        var handledSort = Sort(query.Sort, out var sort, out var computed, out var sortDocument);
+        var relational = Filter.HasCounterpart(query.Filter);
+        var prefix = relational ? new List<BsonDocument>
+        {
+            new("$replaceRoot", new BsonDocument("newRoot", new BsonDocument(Envelope, "$$ROOT")))
+        } : null;
+        if (relational && MandatoryRowPredicate(query.Filter!) is { } mandatory)
+            prefix!.Insert(0, new BsonDocument("$match", Visit(mandatory)));
+        var leaves = new Dictionary<BoundSameIdInFilter, string>();
+        BsonDocument Counterpart(BoundSameIdInFilter bound)
+        {
+            if (Filter.HasCounterpart(bound.Predicate))
+                throw new NotSupportedException("MongoDB nested counterpart predicates are unsupported.");
+            if (!leaves.TryGetValue(bound, out var slot))
+            {
+                var collection = resolveCounterpart?.Invoke(bound.Target)
+                    ?? throw new NotSupportedException("MongoDB counterpart target has not been bound by Data.");
+                var inner = Visit(bound.Predicate);
+                slot = CounterpartField + leaves.Count.ToString(CultureInfo.InvariantCulture);
+                leaves.Add(bound, slot);
+                prefix!.Add(new BsonDocument("$lookup", new BsonDocument
+                {
+                    ["from"] = collection,
+                    ["let"] = new BsonDocument("identity", "$" + Envelope + "._id"),
+                    ["pipeline"] = new BsonArray
+                    {
+                        new BsonDocument("$match", new BsonDocument("$expr",
+                            new BsonDocument("$eq", new BsonArray { "$_id", "$$identity" }))),
+                        new BsonDocument("$match", inner),
+                        new BsonDocument("$limit", 1),
+                        new BsonDocument("$project", new BsonDocument("_id", 1))
+                    },
+                    ["as"] = slot
+                }));
+            }
+            return new BsonDocument(slot + ".0", new BsonDocument("$exists", true));
+        }
+        var filter = query.Filter is null ? new BsonDocument()
+            : Visit(query.Filter, relational ? Envelope + "." : "", relational ? Counterpart : null);
+        if (prefix is not null) prefix.Add(new BsonDocument("$match", filter));
+        var handledSort = Sort(query.Sort, out var sort, out var computed, out var sortDocument, relational);
         var canPage = handledSort.Count == query.Sort.Count;
+        if (relational && !canPage)
+            throw new NotSupportedException("MongoDB counterpart queries require a fully native sort before reading candidates.");
         var limit = hardLimit ?? (query.HasPagination && canPage ? query.EffectivePageSize() : (int?)null);
         var skip = hardLimit is null && query.HasPagination && canPage ? query.EffectiveOffset() : 0;
         return new MongoQueryPlan(
@@ -31,7 +72,8 @@ internal sealed class MongoQueryCompiler<TEntity, TKey>(MongoEntityPlan<TEntity,
             query.CountStrategy is null ? CountExecutionKind.None : CountExecutionKind.Exact,
             filter,
             computed,
-            sortDocument);
+            sortDocument,
+            prefix);
     }
 
     public FilterDefinition<BsonDocument> Predicate(Filter filter)
@@ -40,31 +82,34 @@ internal sealed class MongoQueryCompiler<TEntity, TKey>(MongoEntityPlan<TEntity,
         return Visit(filter);
     }
 
-    private BsonDocument Visit(Filter filter) => filter switch
+    private BsonDocument Visit(Filter filter, string prefix = "", Func<BoundSameIdInFilter, BsonDocument>? counterpart = null) => filter switch
     {
-        AllOf all => Logical("$and", all.Operands, matchAll: true),
-        AnyOf any => Logical("$or", any.Operands, matchAll: false),
-        Not not => new BsonDocument("$nor", new BsonArray([Visit(not.Operand)])),
-        FieldFilter field => Field(field),
+        AllOf all => Logical("$and", all.Operands, true, prefix, counterpart),
+        AnyOf any => Logical("$or", any.Operands, false, prefix, counterpart),
+        Not not => new BsonDocument("$nor", new BsonArray([Visit(not.Operand, prefix, counterpart)])),
+        FieldFilter field => Field(field, prefix),
+        BoundSameIdInFilter bound when counterpart is not null => counterpart(bound),
+        SameIdInFilter or BoundSameIdInFilter => throw new NotSupportedException("MongoDB counterpart nodes require Data binding and a qualified query pipeline."),
         ClrFilter => throw new NotSupportedException("MongoDB received a CLR residual instead of a pushable filter."),
         _ => throw new NotSupportedException($"MongoDB does not support filter node '{filter.GetType().Name}'.")
     };
 
-    private BsonDocument Logical(string operation, IReadOnlyList<Filter> operands, bool matchAll)
+    private BsonDocument Logical(string operation, IReadOnlyList<Filter> operands, bool matchAll,
+        string prefix, Func<BoundSameIdInFilter, BsonDocument>? counterpart)
     {
         if (operands.Count == 0)
             return matchAll ? new BsonDocument() : new BsonDocument("$expr", false);
-        if (operands.Count == 1) return Visit(operands[0]);
-        return new BsonDocument(operation, new BsonArray(operands.Select(Visit)));
+        if (operands.Count == 1) return Visit(operands[0], prefix, counterpart);
+        return new BsonDocument(operation, new BsonArray(operands.Select(operand => Visit(operand, prefix, counterpart))));
     }
 
-    private BsonDocument Field(FieldFilter filter)
+    private BsonDocument Field(FieldFilter filter, string prefix)
     {
         if (filter.IgnoreCase)
             throw new NotSupportedException("MongoDB case-insensitive filter pushdown was not declared.");
         var resolved = FieldPathResolver.Resolve(typeof(TEntity), filter.Field);
         var logicalPath = resolved.CanonicalPath ?? filter.Field;
-        var path = entity.Field(logicalPath, resolved, MappingConsumer.Filter);
+        var path = prefix + entity.Field(logicalPath, resolved, MappingConsumer.Filter);
         var scalar = filter.Value is FilterValue.Scalar one ? one.Value : null;
         var set = filter.Value switch
         {
@@ -149,12 +194,17 @@ internal sealed class MongoQueryCompiler<TEntity, TKey>(MongoEntityPlan<TEntity,
         IReadOnlyList<SortSpec> requested,
         out SortDefinition<BsonDocument>? definition,
         out BsonDocument? computed,
-        out BsonDocument? sortDocument)
+        out BsonDocument? sortDocument,
+        bool enveloped = false)
     {
         definition = null;
         computed = null;
         sortDocument = null;
-        if (requested.Count == 0) return [];
+        if (requested.Count == 0)
+        {
+            if (enveloped) sortDocument = new BsonDocument(Envelope + "._id", 1);
+            return [];
+        }
 
         var parts = new List<SortDefinition<BsonDocument>>(requested.Count);
         var order = new BsonDocument();
@@ -163,14 +213,15 @@ internal sealed class MongoQueryCompiler<TEntity, TKey>(MongoEntityPlan<TEntity,
         foreach (var sort in requested)
         {
             string name;
+            var computedKey = false;
             if (sort.Path.TraversesCollection || sort.Aggregation != SortAggregation.None)
             {
                 var expression = entity.CollectionOrderExpression(sort.Path, sort.Aggregation);
                 if (expression is null) break;
-                // Prefixed so it cannot collide with a document field, and removed again before the
-                // documents are materialized.
+                // Counterpart pipelines place computed slots beside the original document envelope.
                 name = ComputedOrderField + handled.Count.ToString(CultureInfo.InvariantCulture);
-                added[name] = expression;
+                computedKey = true;
+                added[name] = enveloped ? EnvelopeExpression(expression) : expression;
             }
             else
             {
@@ -181,10 +232,12 @@ internal sealed class MongoQueryCompiler<TEntity, TKey>(MongoEntityPlan<TEntity,
                 {
                     var expression = MongoEntityPlan<TEntity, TKey>.EnumOrderExpression("$" + name, resolved.ComparableType);
                     name = ComputedOrderField + handled.Count.ToString(CultureInfo.InvariantCulture);
-                    added[name] = expression;
+                    computedKey = true;
+                    added[name] = enveloped ? EnvelopeExpression(expression) : expression;
                 }
             }
 
+            if (enveloped && !computedKey) name = Envelope + "." + name;
             parts.Add(sort.Desc
                 ? Builders<BsonDocument>.Sort.Descending(name)
                 : Builders<BsonDocument>.Sort.Ascending(name));
@@ -194,9 +247,10 @@ internal sealed class MongoQueryCompiler<TEntity, TKey>(MongoEntityPlan<TEntity,
 
         if (handled.Count != requested.Count) return [];
 
-        if (added.ElementCount > 0)
+        if (enveloped && !order.Contains(Envelope + "._id")) order[Envelope + "._id"] = 1;
+        if (enveloped || added.ElementCount > 0)
         {
-            computed = added;
+            computed = added.ElementCount > 0 ? added : null;
             sortDocument = order;
             return handled;
         }
@@ -207,6 +261,30 @@ internal sealed class MongoQueryCompiler<TEntity, TKey>(MongoEntityPlan<TEntity,
 
     /// <summary>Prefix for the fields a pipeline adds to hold a collection aggregate while it sorts.</summary>
     internal const string ComputedOrderField = "__koanOrder";
+    internal const string Envelope = "__koanRow";
+    internal const string CounterpartField = "__koanCounterpart";
+
+    // Only a whole row-only subtree or an AND operand is mandatory. Pulling a relational OR/NOT arm
+    // forward would change eligibility. Keep the complete final predicate even after this optimization.
+    private static Filter? MandatoryRowPredicate(Filter filter)
+    {
+        if (!Filter.HasCounterpart(filter)) return filter;
+        if (filter is not AllOf all) return null;
+        Filter? result = null;
+        foreach (var operand in all.Operands) result = Filter.And(result, MandatoryRowPredicate(operand));
+        return result;
+    }
+
+    private static BsonValue EnvelopeExpression(BsonValue value) => value switch
+    {
+        BsonString text when text.Value.StartsWith("$", StringComparison.Ordinal) &&
+                             !text.Value.StartsWith("$$", StringComparison.Ordinal) =>
+            new BsonString("$" + Envelope + "." + text.Value[1..]),
+        BsonDocument document => new BsonDocument(document.Elements.Select(element =>
+            new BsonElement(element.Name, element.Name == "$literal" ? element.Value : EnvelopeExpression(element.Value)))),
+        BsonArray array => new BsonArray(array.Select(EnvelopeExpression)),
+        _ => value
+    };
 
     private static BsonDocument Compare(string path, string operation, BsonValue value) =>
         new(path, new BsonDocument(operation, value));
@@ -241,4 +319,5 @@ internal sealed record MongoQueryPlan(
     // When Computed is present the query runs as a pipeline, because find cannot sort by an expression.
     BsonDocument FilterDocument,
     BsonDocument? Computed,
-    BsonDocument? SortDocument);
+    BsonDocument? SortDocument,
+    IReadOnlyList<BsonDocument>? Prefix = null);

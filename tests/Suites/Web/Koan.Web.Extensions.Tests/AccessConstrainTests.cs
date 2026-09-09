@@ -4,6 +4,7 @@ using System.Security.Claims;
 using AwesomeAssertions;
 using Koan.Web.Authorization;
 using Koan.Web.Hooks;
+using Koan.Data.Abstractions.Filtering;
 using Xunit;
 
 namespace Koan.Web.Extensions.Tests;
@@ -36,7 +37,30 @@ public sealed class AccessConstrainTests
     {
         var f = new AccessFilter<Memo>();
         f.Where(m => m.Text == "a").Where(m => m.Text == "b");
-        f.Predicates.Should().HaveCount(2);
+        f.Filter.Should().BeOfType<AllOf>().Which.Operands.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Access_and_options_capture_supported_values_when_contributed()
+    {
+        var text = "original";
+        var allowed = new System.Collections.Generic.List<string> { "allowed" };
+        var access = new AccessFilter<Memo>();
+        var options = new QueryOptions();
+        access.Where(memo => memo.Text == text || allowed.Contains(memo.Text));
+        options.AddPredicate<Memo>(memo => memo.Text == text || allowed.Contains(memo.Text));
+        text = "changed";
+        allowed.Clear();
+        allowed.Add("later");
+
+        foreach (var filter in new[] { access.Filter, options.Filter })
+        {
+            var matches = InMemoryFilterEvaluator.Compile<Memo>(filter!);
+            matches(new Memo { Text = "original" }).Should().BeTrue();
+            matches(new Memo { Text = "allowed" }).Should().BeTrue();
+            matches(new Memo { Text = "changed" }).Should().BeFalse();
+            matches(new Memo { Text = "later" }).Should().BeFalse();
+        }
     }
 
     [Fact]
