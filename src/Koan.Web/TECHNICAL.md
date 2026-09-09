@@ -203,6 +203,10 @@ Owner-gate-only row enforcement is outside this insertion correction. No opt-out
 resource-grant fallback in `EntityFloorAuthorizationProvider`. Scoped `AgentGrantStore` retains its
 existing request memoization; no additional authority provider or grant cache is introduced.
 
+Boot validation inspects declarations in Web and assemblies that reference its Access attribute.
+Base declarations are validated at their declaring type. Unrelated runtime property metadata is
+outside this scan; inherited runtime policy evaluation is unchanged.
+
 The editor-hidden `FieldAccess.Prepare` follows neutral Newtonsoft object, collection and dictionary
 contracts from one root type. It never visits object values. Only structural metadata is shared;
 principal decisions and serializer callbacks are operation-local. Optional pure protocol exclusions

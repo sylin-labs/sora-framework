@@ -214,3 +214,42 @@ overwritten; it is not counted. The surviving `web-field-final.trx` has 54 total
 when stricter dynamic qualification rejected native ProblemDetails converters. Review2 then passed 68.
 Review3 has 71 total, 69 passed and two failed fixture expectations about JsonIgnore persistence; only
 those expectations were corrected. Unique review4 is the final 73-pass Web receipt above.
+
+### Public consumer startup correction: Explore
+
+Release 34400186238 published candidate `7a74225ccb7972b4bca8f04a011186fa39116bd5`.
+Gposingway restored all 33 application and 35 test Koan dependencies from NuGet.org. Its first
+field-adoption run has 68 passes and 45 startup failures, all the same exception: property discovery
+loads an unavailable attribute from unrelated test-platform metadata. This is a Koan boot defect,
+not evidence that the pending HTTP privacy cases pass or fail their assertions.
+
+Business intent and expression stay `[Access(read: "is:admin")]` plus the existing Web reference
+and `AddKoan()`. Declaration validation must reject malformed app gates without interrogating
+unrelated runtime property metadata. No new setup, option, registry or public concept is warranted.
+
+The root README and architecture principles establish reference-driven composition; Web README
+and TECHNICAL establish automatic gate validation and shared field authority. AccessGateRegistrar
+currently walks every loaded property, AccessGateCache owns parsing, AccessAttribute is sealed and
+owned by Web, and the existing AssemblyCache owns assembly discovery. No relevant constant or
+option exists or is needed: attribute assembly identity comes from `typeof(AccessAttribute)`.
+
+The correction belongs in AccessGateRegistrar. Inspect direct declarations only in the attribute's
+own assembly or an assembly directly referencing it. Such a reference is required to declare this
+attribute. Base declarations are validated at their declaring type, avoiding repeated inherited
+inspection. Generic definitions also require declaration validation; no constructed instance is needed
+to parse a gate. Existing runtime inherited gate evaluation is unchanged. Preserve malformed declaration
+failure; do not catch attribute errors and silently open gates. Tests belong in the existing Web
+WellKnown suite and cover unrelated metadata, malformed class/property declarations, inherited base
+declarations and valid declarations. Public-package Gposingway startup and field tests remain the
+consumer acceptance condition. This narrows the existing scan without introducing another scanner.
+
+The implementation now yields each direct Type/Property declaration once, removing the preliminary
+property search and repeated per-entity property walk. A bad class no longer prevents collecting a
+bad property in the same boot report. Independent review accepted the owner and narrowed scan.
+`TEMP/koan-ae10/web-discovery-before.trx` reproduces three failures and two controls against the
+previous scan, using an internal assembly input only for characterization. The five corrected cases
+and 59 existing field cases then pass together in `web-discovery-fields-final.trx`, zero warnings,
+failures or skips. Two intermediate receipts contain only test-metadata proxy mistakes and are not
+production failures. The subsequent one-pass simplification adds a sixth aggregate-error case;
+all six pass in `web-declaration-discovery-final.trx` with zero warnings, failures or skips. The lead
+parsed both final receipts and the prior-scan baseline. Public consumer startup remains pending.
