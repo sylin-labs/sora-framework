@@ -81,6 +81,14 @@ Transport choices are host-level options; every enabled edge projects the same g
 surface. Application-owned inputs, Entity results, custom-tool results, and Code Mode objects share
 one camelCase JSON contract while protocol envelopes retain their specification-defined names.
 
+The standard typed application serializer writes enums as member-name strings, including nested
+entities, terminal summaries, relationship graphs, custom-tool results and mutation deltas. Code
+Mode's existing JSON facade uses the same output converter. Unnamed enum values fail serialization
+instead of emitting a number. The converter applies only to writes: legacy Newtonsoft numeric enum
+input remains accepted where existing schema/admission permits it. It does not reinterpret numbers
+inside prebuilt JSON or strings, and explicit application converters retain their own contract.
+Conditional field access and stronger MCP exclusions still apply before values reach this serializer.
+
 ## References
 
 - Runtime facts: `/docs/engineering/runtime-facts.md`

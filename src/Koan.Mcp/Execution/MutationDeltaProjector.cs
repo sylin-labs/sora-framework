@@ -4,9 +4,7 @@ using System.Threading.Tasks;
 using Koan.Web.Authorization;
 using Koan.Web.Endpoints;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
 
 namespace Koan.Mcp.Execution;
 
@@ -22,15 +20,6 @@ namespace Koan.Mcp.Execution;
 /// </summary>
 internal static class MutationDeltaProjector
 {
-    // Mirrors the result serializer (honors [McpIgnore(Output)]) and renders enums as their member names so
-    // a delta value matches the agent-facing wire representation of the field.
-    private static readonly JsonSerializerSettings ValueSettings = new()
-    {
-        NullValueHandling = NullValueHandling.Ignore,
-        ContractResolver = new CamelCasePropertyNamesContractResolver(),
-        Converters = { new StringEnumConverter() }
-    };
-
     /// <summary>Builds the (dryRun, delta) pair from the result's stashed mutation probe. Either may be
     /// default when the operation produced no delta (e.g. a read, or a not-found short-circuit).</summary>
     public static async Task<(bool DryRun, JObject? Delta)> Project(Type entityType, EntityEndpointResult result)
@@ -55,7 +44,7 @@ internal static class MutationDeltaProjector
         var after = ExtractModel(result);
         var fields = await McpJson.Prepare(entityType, result.Context.Services, result.Context.User,
             result.Context.CancellationToken).ConfigureAwait(false);
-        var serializer = JsonSerializer.Create(fields.CreateSerializerSettings(ValueSettings));
+        var serializer = McpJson.CreateApplicationSerializer(fields);
 
         return (dryRun, new JObject
         {

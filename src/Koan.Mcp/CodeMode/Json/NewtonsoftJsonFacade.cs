@@ -13,7 +13,8 @@ internal sealed class NewtonsoftJsonFacade : IJsonFacade
         ContractResolver = McpContractResolver.Instance,
         NullValueHandling = NullValueHandling.Ignore,
         DateParseHandling = DateParseHandling.DateTimeOffset,
-        FloatParseHandling = FloatParseHandling.Decimal
+        FloatParseHandling = FloatParseHandling.Decimal,
+        Converters = { McpJson.EnumNames }
     });
 
     public JToken Parse(string json) => JToken.Parse(json);
