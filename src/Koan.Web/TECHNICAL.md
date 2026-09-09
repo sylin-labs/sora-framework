@@ -259,6 +259,16 @@ Partial JSON and JSON Merge Patch require whole-value write admission. JSON Patc
 selective field-edit protocol. The existing normalizer's empty-object omission and unescaped alias path
 behavior are separate Data findings, not repaired by this slice. No extra patch walker is introduced.
 
+## Typed merge/partial application (AE-16)
+
+`EntityEndpointService.Patch` applies JToken patches through the Data.Core typed applicators and
+assigns the returned working copy; the stored row is never edited in place. Applicator refusals
+(identity or family-discriminator edits, ambiguous duplicate-cased members, malformed payloads,
+policy-rejected nulls, and non-convertible values) surface as a corrective 422 with the applicator's
+message after `BeforePatch` and before stamps, `BeforeSave` and any save. Dry-run rehearsals project
+the restored copy and persist nothing. Field admission, row constraints, hooks, stamps and audit are
+unchanged; JSON Patch keeps its existing typed path.
+
 AccessProjection's internal generic envelope retains the actual payload CLR type. Collection relationship
 responses retain RelationshipGraph<T> arrays. For that existing graph family alone, preparation obtains
 parent and child types from IRelationshipMetadata. It never examines graph values or maintains another

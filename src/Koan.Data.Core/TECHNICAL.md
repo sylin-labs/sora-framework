@@ -38,6 +38,26 @@ validation:
 - Data Core owns patch execution, lifecycle, persistence, and result semantics; adapters do not parse HTTP payloads.
 - The contract boundary has no ASP.NET Core dependency and no parallel object-shaped patch request path.
 
+### Typed merge/partial applicators (AE-16)
+
+- `MergePatchApplicator`/`PartialJsonApplicator` expose `ApplyToCopy(target)` only: they serialize the target with
+  the Entity document serializer, admit and merge the supplied members into that document, and restore it through
+  `EntityJsonSerialization` (the same materialization persistence reads with). The input target is never mutated;
+  a refused, malformed, or non-convertible patch throws before any state exists to save.
+- Admission is native Newtonsoft contract metadata (writable, non-ignored members with the document's wire names,
+  `JsonObjectContract`/`JsonDictionaryContract`/`JsonArrayContract` item shapes) and applies recursively to every
+  supplied object, dictionary entry, and array element, including newly created subtrees. Patch admission stays
+  distinct from restoration: a private setter the document restores is not permission for a caller to assign it.
+- Dictionary keys are exact data: never case-aliased and never defaulted. A merge null removes the
+  dictionary entry (RFC 7386 removal is representable per key). Typed members under merge-null take
+  an explicit CLR default (non-nullable) or explicit null, so constructor seeds do not resurface.
+  `MergePatchNullPolicy.Reject` refuses nulls that target non-nullable members;
+  `PartialJsonNullPolicy` keeps SetNull/Ignore/Reject as documented.
+- Entity identity (`Id` under any wire alias) and the family discriminator (`__koan_type`) are refused, at any
+  family node, by name and by resolved member. A new subtree over an abstract/interface member type refuses:
+  the concrete shape comes from stored state, never caller input. `JToken`/`object`-typed members are raw caller
+  data and pass through unchanged.
+
 ## Context ownership
 
 - `EntityContext` is the Data facade for source, adapter, partition, cache, and transaction routing.

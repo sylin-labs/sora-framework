@@ -12,7 +12,16 @@ public static class EntityJsonSerialization
     private static readonly JsonSerializerSettings DocumentSettings = Apply(
         new JsonSerializerSettings
         {
-            ContractResolver = new CamelCasePropertyNamesContractResolver(),
+            // Property names keep the camel wire shape; dictionary KEYS are data and keep their exact casing
+            // (AE-16): a stored document must not recase them.
+            ContractResolver = new DefaultContractResolver
+            {
+                NamingStrategy = new CamelCaseNamingStrategy
+                {
+                    ProcessDictionaryKeys = false,
+                    OverrideSpecifiedNames = true,
+                },
+            },
             NullValueHandling = NullValueHandling.Include,
             // Same hydration law as the relational codec (PMC-061): the stored document is authoritative —
             // Replace, never populate-into constructor-seeded collections.
@@ -82,6 +91,26 @@ public static class EntityJsonSerialization
         return writer.Token
             ?? throw new InvalidDataException(
                 $"Entity token serialization produced no document for '{entity.GetType().FullName}'.");
+    }
+
+    /// <summary>
+    /// Materializes a document produced by <see cref="SerializeDocumentToken"/> back into an Entity through the
+    /// same document serializer and stored-only family classification that persistence restores with (AE-16).
+    /// </summary>
+    internal static object MaterializeDocument(JObject document, Type nominalType)
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        ArgumentNullException.ThrowIfNull(nominalType);
+
+        var serializer = JsonSerializer.Create(DocumentSettings);
+        if (!EntityRootDescriptor.TryFor(nominalType, out _))
+        {
+            return document.ToObject(nominalType, serializer)
+                ?? throw new InvalidDataException(
+                    $"Entity JSON could not materialize '{nominalType.FullName}'.");
+        }
+
+        return MaterializeStored(document, nominalType, serializer);
     }
 
     /// <summary>Materializes a framework Entity document through the same safe family catalog as adapters.</summary>

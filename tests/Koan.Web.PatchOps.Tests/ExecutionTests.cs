@@ -52,7 +52,7 @@ public class ExecutionTests
         var e = new DummyEntity { Name = "A", Count = 5, Sub = new Sub { Note = "hi" } };
         var patch = JObject.Parse("{ \"name\": \"B\", \"sub\": { \"note\": null } }");
         var app = new MergePatchApplicator<DummyEntity>(patch, MergePatchNullPolicy.SetDefault);
-        app.Apply(e);
+        e = app.ApplyToCopy(e);
 
         e.Name.Should().Be("B");
         e.Sub.Note.Should().BeNull();
@@ -65,16 +65,16 @@ public class ExecutionTests
         var patch = JObject.Parse("{ \"name\": null }");
 
         // SetNull
-        new PartialJsonApplicator<DummyEntity>(patch, PartialJsonNullPolicy.SetNull).Apply(e);
+        e = new PartialJsonApplicator<DummyEntity>(patch, PartialJsonNullPolicy.SetNull).ApplyToCopy(e);
         e.Name.Should().BeNull();
 
         // Ignore
         e.Name = "A";
-        new PartialJsonApplicator<DummyEntity>(patch, PartialJsonNullPolicy.Ignore).Apply(e);
+        e = new PartialJsonApplicator<DummyEntity>(patch, PartialJsonNullPolicy.Ignore).ApplyToCopy(e);
         e.Name.Should().Be("A");
 
         // Reject
-        var act = () => new PartialJsonApplicator<DummyEntity>(patch, PartialJsonNullPolicy.Reject).Apply(e);
+        var act = () => new PartialJsonApplicator<DummyEntity>(patch, PartialJsonNullPolicy.Reject).ApplyToCopy(e);
         act.Should().Throw<InvalidOperationException>();
     }
 
@@ -83,12 +83,12 @@ public class ExecutionTests
     {
         var e1 = new DummyEntity { Tags = new[] { "x", "y" } };
         var partial = JObject.Parse("{ \"tags\": [\"a\", \"b\", \"c\"] }");
-        new PartialJsonApplicator<DummyEntity>(partial, PartialJsonNullPolicy.SetNull).Apply(e1);
+        e1 = new PartialJsonApplicator<DummyEntity>(partial, PartialJsonNullPolicy.SetNull).ApplyToCopy(e1);
         e1.Tags.Should().BeEquivalentTo(new[] { "a", "b", "c" }, opts => opts.WithStrictOrdering());
 
         var e2 = new DummyEntity { Tags = new[] { "x", "y" } };
         var merge = JObject.Parse("{ \"tags\": [\"1\"] }");
-        new MergePatchApplicator<DummyEntity>(merge, MergePatchNullPolicy.SetDefault).Apply(e2);
+        e2 = new MergePatchApplicator<DummyEntity>(merge, MergePatchNullPolicy.SetDefault).ApplyToCopy(e2);
         e2.Tags.Should().BeEquivalentTo(new[] { "1" }, opts => opts.WithStrictOrdering());
     }
 
@@ -166,7 +166,7 @@ public class ExecutionTests
     {
         var e = new DummyEntity { Count = 7 };
         var patch = JObject.Parse("{ \"count\": null }");
-        var act = () => new MergePatchApplicator<DummyEntity>(patch, MergePatchNullPolicy.Reject).Apply(e);
+        var act = () => new MergePatchApplicator<DummyEntity>(patch, MergePatchNullPolicy.Reject).ApplyToCopy(e);
         act.Should().Throw<Exception>();
     }
 

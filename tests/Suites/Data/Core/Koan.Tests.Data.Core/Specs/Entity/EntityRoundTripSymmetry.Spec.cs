@@ -101,6 +101,37 @@ public sealed class EntityRoundTripSymmetrySpec
         JObject.Parse(json)["buckets"]!["game"].Should().BeOfType<JArray>();
     }
 
+    [Fact]
+    public void Mixed_case_dictionary_keys_survive_document_and_token_round_trips()
+    {
+        var source = new KeyedValuesOwner { Id = "keyed-owner" };
+        source.Values["first"] = "lower";
+        source.Values["FIRST"] = "distinct";
+
+        var json = EntityJsonSerialization.SerializeDocument(source);
+        var document = JObject.Parse(json);
+        document["values"]!["first"]!.Value<string>().Should().Be("lower");
+        document["values"]!["FIRST"]!.Value<string>().Should().Be("distinct", "dictionary keys are data, not field aliases");
+
+        var restored = (KeyedValuesOwner)EntityJsonSerialization.DeserializeDocument(json, typeof(KeyedValuesOwner));
+        restored.Values.Should().BeEquivalentTo(new Dictionary<string, string>
+        {
+            ["first"] = "lower",
+            ["FIRST"] = "distinct",
+        });
+
+        var token = (JObject)EntityJsonSerialization.SerializeDocumentToken(source);
+        token["values"]!["FIRST"]!.Value<string>().Should().Be("distinct");
+        var restoredToken = (KeyedValuesOwner)EntityJsonSerialization.DeserializeDocument(
+            token.ToString(), typeof(KeyedValuesOwner));
+        restoredToken.Values.Should().BeEquivalentTo(source.Values);
+    }
+
+    private sealed class KeyedValuesOwner : Entity<KeyedValuesOwner>
+    {
+        public Dictionary<string, string> Values { get; set; } = new();
+    }
+
     private sealed class BucketOwner : Entity<BucketOwner>
     {
         public Dictionary<string, Bucket> Buckets { get; set; } = new();

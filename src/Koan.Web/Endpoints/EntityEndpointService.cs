@@ -1183,11 +1183,37 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
                                 ?? PartialJsonNullPolicy.SetNull;
             if (request.Kind == EntityPatchKind.MergePatch7386)
             {
-                new Koan.Data.Core.Patch.MergePatchApplicator<TEntity>(jt, mergePolicy).Apply(working);
+                // AE-16: the applicator restores a typed working copy (additive collections, private stored
+                // state, siblings and family shape survive); refusal, malformed intent, or a non-convertible
+                // value throws here, before stamps, BeforeSave and any save (BeforePatch has already run),
+                // and becomes a corrective 422.
+                try
+                {
+                    working = new Koan.Data.Core.Patch.MergePatchApplicator<TEntity>(jt, mergePolicy).ApplyToCopy(working);
+                }
+                catch (Exception ex) when (ex is Newtonsoft.Json.JsonException
+                                               or System.IO.InvalidDataException
+                                               or InvalidOperationException
+                                               or ArgumentException)
+                {
+                    return new EntityModelResult<TEntity>(context, null, null,
+                        new UnprocessableEntityObjectResult(new { error = ex.Message }));
+                }
             }
             else
             {
-                new Koan.Data.Core.Patch.PartialJsonApplicator<TEntity>(jt, partialPolicy).Apply(working);
+                try
+                {
+                    working = new Koan.Data.Core.Patch.PartialJsonApplicator<TEntity>(jt, partialPolicy).ApplyToCopy(working);
+                }
+                catch (Exception ex) when (ex is Newtonsoft.Json.JsonException
+                                               or System.IO.InvalidDataException
+                                               or InvalidOperationException
+                                               or ArgumentException)
+                {
+                    return new EntityModelResult<TEntity>(context, null, null,
+                        new UnprocessableEntityObjectResult(new { error = ex.Message }));
+                }
             }
         }
         else
