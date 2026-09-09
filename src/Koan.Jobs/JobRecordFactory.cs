@@ -7,7 +7,7 @@ internal static class JobRecordFactory
     public static JobRecord Create(
         JobTypeBinding binding, ResolvedActionPolicy policy, object workItem,
         string workId, string action, DateTimeOffset now, TimeSpan? after, string? correlationId, string? gateKey,
-        IReadOnlyDictionary<string, string>? ambientCarrier = null)
+        IReadOnlyDictionary<string, string>? ambientCarrier = null, JobDataRoute route = default)
     {
         // Scheduling is an initiator concern (the scheduler submits on a cadence), not a job state — every job is
         // visible now (or after an explicit delay). No parking.
@@ -16,6 +16,9 @@ internal static class JobRecordFactory
         {
             WorkType = binding.WorkType,
             WorkId = workId,
+            WorkSource = route.Source,
+            WorkAdapter = route.Adapter,
+            WorkPartition = route.Partition,
             Action = action,
             Status = JobStatus.Queued,
             VisibleAt = visibleAt,
@@ -23,7 +26,7 @@ internal static class JobRecordFactory
             Lane = policy.Lane,
             // The stored coalesce key folds in the captured context, so two tenants' idempotent submits never
             // collide. Matches the coordinator's dedup lookup (same fold), keeping dedup context-scoped.
-            CoalesceKey = JobCoalesce.FoldAmbient(binding.CoalesceKey(workItem, action), ambientCarrier),
+            CoalesceKey = JobCoalesce.FoldAmbient(binding.CoalesceKey(workItem, action), ambientCarrier, route),
             PoolKey = binding.PoolName,           // pool name stamped at submit; GateKey resolved at claim (JOBS-0007)
             GateKey = binding.PoolName is not null ? null : gateKey,  // pool jobs: gate unset until claim-time election
             Exclusive = !binding.ParallelSafe,   // per-entity serialization unless the type opts out

@@ -59,8 +59,8 @@ public sealed class JobsHarness : IAsyncDisposable
     }
 
     /// <summary>Generic durable tier — caller supplies the data-source settings (Mongo/Postgres/SqlServer).</summary>
-    public static Task<JobsHarness> StartWithSettingsAsync(IReadOnlyDictionary<string, string?> settings, Action<JobsOptions>? configure = null, Action<IServiceCollection>? configureServices = null)
-        => StartCore(configure, settings, null, configureServices: configureServices);
+    public static Task<JobsHarness> StartWithSettingsAsync(IReadOnlyDictionary<string, string?> settings, Action<JobsOptions>? configure = null, Action<IServiceCollection>? configureServices = null, bool clearOnStart = true)
+        => StartCore(configure, settings, null, clearOnStart, configureServices);
 
     /// <summary>SQLite against a specific db file (for crash/restart tests). <paramref name="clearOnStart"/> false =
     /// reuse the existing data (a "reboot"); <paramref name="ownsDb"/> false = leave the file for the test to manage.</summary>
@@ -77,7 +77,9 @@ public sealed class JobsHarness : IAsyncDisposable
 
     private static async Task<JobsHarness> StartCore(Action<JobsOptions>? configure, IReadOnlyDictionary<string, string?>? settings, string? dbPath, bool clearOnStart = true, Action<IServiceCollection>? configureServices = null)
     {
-        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-01-01T00:00:00Z"));
+        // Mongo's TTL monitor uses wall time. Start ahead of it so terminal records survive until
+        // the test explicitly drives archival; an old fixed date races the server's background expiry.
+        var clock = new FakeTimeProvider(new DateTimeOffset(DateTime.UtcNow.Date.AddDays(1), TimeSpan.Zero));
         var builder = KoanIntegrationHost.Configure();
         if (settings is not null) builder = builder.WithSettings(settings);
         var host = builder

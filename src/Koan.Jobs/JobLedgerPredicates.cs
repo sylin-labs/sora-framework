@@ -17,6 +17,18 @@ internal static class JobLedgerPredicates
         if (q.WorkId is { } wid) p = And(p, r => r.WorkId == wid);
         if (q.Action is { } a) p = And(p, r => r.Action == a);
         if (q.Status is { } s) p = And(p, r => r.Status == s);
+        if (q.WorkSource is { } source)
+        {
+            source = JobDataRoute.NormalizeSource(source) ?? "";
+            p = And(p, source.Length == 0 ? r => r.WorkSource == null || r.WorkSource == "" : r => r.WorkSource == source);
+        }
+        if (q.WorkAdapter is { } adapter)
+        {
+            adapter = JobDataRoute.NormalizeSelector(adapter) ?? "";
+            p = And(p, adapter.Length == 0 ? r => r.WorkAdapter == null || r.WorkAdapter == "" : r => r.WorkAdapter == adapter);
+        }
+        if (q.WorkPartition is { } partition)
+            p = And(p, partition.Length == 0 ? r => r.WorkPartition == null || r.WorkPartition == "" : r => r.WorkPartition == partition);
         return p ?? (static r => true);
     }
 

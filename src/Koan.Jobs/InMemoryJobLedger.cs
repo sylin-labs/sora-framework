@@ -63,7 +63,7 @@ internal sealed class InMemoryJobLedger : IJobLedger
             // (WorkType, WorkId) is already running.
             var busy = _records.Values
                 .Where(r => r.Status == JobStatus.Running)
-                .Select(r => (r.WorkType, r.WorkId))
+                .Select(JobDataRoute.Identity)
                 .ToHashSet();
 
             // Build member slot counts for pool dispatch (JOBS-0007): member key -> running count.
@@ -90,7 +90,7 @@ internal sealed class InMemoryJobLedger : IJobLedger
                             && r.CancelRequestedAt is null
                             && OpenTo(r, owner, now)
                             && !saturatedLanes.Contains(r.Lane)
-                            && !(r.Exclusive && busy.Contains((r.WorkType, r.WorkId))))
+                            && !(r.Exclusive && busy.Contains(JobDataRoute.Identity(r))))
                 .OrderBy(r => r.VisibleAt)
                 .ThenBy(r => r.FirstSubmittedAt))
             {
@@ -273,10 +273,7 @@ internal sealed class InMemoryJobLedger : IJobLedger
         lock (_gate)
         {
             var list = _records.Values
-                .Where(r => (query.WorkType is null || r.WorkType == query.WorkType)
-                            && (query.WorkId is null || r.WorkId == query.WorkId)
-                            && (query.Action is null || r.Action == query.Action)
-                            && (query.Status is null || r.Status == query.Status))
+                .Where(JobLedgerPredicates.ForQuery(query).Compile())
                 .Select(r => r.Clone()).ToList();
             return Task.FromResult<IReadOnlyList<JobRecord>>(list);
         }

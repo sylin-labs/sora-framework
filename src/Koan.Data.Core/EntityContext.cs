@@ -69,9 +69,9 @@ public static class EntityContext
                 throw new InvalidOperationException(
                     "Cannot specify both 'source' and 'adapter'. Sources define their own adapter selection.");
 
-            Source = source;
-            Adapter = adapter;
-            Partition = partition;
+            Source = string.IsNullOrWhiteSpace(source) ? null : source;
+            Adapter = string.IsNullOrWhiteSpace(adapter) ? null : adapter;
+            Partition = string.IsNullOrWhiteSpace(partition) ? null : partition;
             Transaction = transaction;
             CacheBehavior = cacheBehavior;
         }
@@ -117,7 +117,8 @@ public static class EntityContext
     /// clear it — so a nested scope can change one axis (e.g. add a partition) while the rest carry over.
     ///
     /// <para>Mutual exclusion of source and adapter is enforced on the <b>effective</b> (post-inheritance)
-    /// values: because the two inherit independently, naming an <paramref name="adapter"/> while a source
+    /// values. Empty source, adapter or partition explicitly clears that axis to its normalized null default.
+    /// Because the two inherit independently, naming an <paramref name="adapter"/> while a source
     /// is inherited from the ambient context — or a <paramref name="source"/> while an adapter is
     /// inherited — throws <see cref="InvalidOperationException"/>. Switch routing axes from a scope that
     /// does not inherit the other, or override both explicitly.</para>

@@ -13,6 +13,74 @@ namespace Koan.Jobs.Adapter.Sqlite.Tests.Specs;
 public sealed class DurableSqliteSpec
 {
     [Fact]
+    public async Task named_source_work_executes_from_central_ledger_and_survives_restart()
+    {
+        var rootPath = Path.Combine(Path.GetTempPath(), $"koan-jobs-address-root-{Guid.NewGuid():N}.db");
+        var workPath = Path.Combine(Path.GetTempPath(), $"koan-jobs-address-work-{Guid.NewGuid():N}.db");
+        var settings = new Dictionary<string, string?>
+        {
+            ["Koan:Environment"] = "Test",
+            ["Koan:Data:Sources:Default:Adapter"] = "sqlite",
+            ["Koan:Data:Sources:Default:ConnectionString"] = $"Data Source={rootPath};Pooling=False",
+            ["Koan:Data:Sources:localized:Adapter"] = "sqlite",
+            ["Koan:Data:Sources:localized:ConnectionString"] = $"Data Source={workPath};Pooling=False"
+        };
+        var work = new GreetJob { Name = "named-source" };
+        try
+        {
+            await using (var host = await JobsHarness.StartWithSettingsAsync(settings))
+            {
+                using (EntityContext.Source("localized"))
+                using (EntityContext.Partition("fr")) await work.Job.Submit();
+                var record = await host.JobFor<GreetJob>(work.Id);
+                record.Should().NotBeNull();
+                record!.WorkSource.Should().Be("localized");
+                (await GreetJob.Get(work.Id)).Should().BeNull();
+            }
+            // Preserve the ledger while booting the same configuration into a new host.
+            await using var restarted = await JobsHarness.StartWithSettingsAsync(settings, clearOnStart: false);
+            await restarted.Drain();
+            using (EntityContext.Source("localized"))
+            using (EntityContext.Partition("fr"))
+            {
+                (await GreetJob.Get(work.Id))!.Greeting.Should().Be("Hello, named-source");
+                (await work.Job.Status()).Should().Be(JobStatus.Completed);
+            }
+        }
+        finally
+        {
+            if (File.Exists(rootPath)) File.Delete(rootPath);
+            if (File.Exists(workPath)) File.Delete(workPath);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task partitioned_submission_retains_transaction_commit_or_rollback(bool commit)
+    {
+        await using var host = await JobsHarness.StartSqliteAsync();
+        var work = new GreetJob { Name = "transaction" };
+        using (EntityContext.Partition("fr"))
+        using (EntityContext.Transaction("partitioned-submit"))
+        {
+            await work.Job.Submit();
+            (await work.Job.Status()).Should().BeNull();
+            if (commit) await EntityContext.Commit();
+            else await EntityContext.Rollback();
+        }
+        await host.Drain();
+        var records = await host.Ledger.Query(new JobQuery(WorkId: work.Id), default);
+        records.Should().HaveCount(commit ? 1 : 0);
+        using (EntityContext.Partition("fr"))
+        {
+            var stored = await GreetJob.Get(work.Id);
+            if (commit) stored!.Greeting.Should().Be("Hello, transaction");
+            else stored.Should().BeNull();
+        }
+    }
+
+    [Fact]
     public async Task explicit_default_source_owns_the_database_file()
     {
         var db = Path.Combine(Path.GetTempPath(), $"koan-jobs-placement-{Guid.NewGuid():n}.db");

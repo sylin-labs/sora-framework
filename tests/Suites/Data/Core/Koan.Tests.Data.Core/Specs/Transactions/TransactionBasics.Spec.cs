@@ -21,6 +21,29 @@ public sealed class TransactionBasicsSpec
     }
 
     [Fact]
+    public async Task Deferred_save_and_delete_restore_default_route_when_commit_has_another_partition_and_adapter()
+    {
+        await using var runtime = await DataCoreRuntimeFixture.CreateAsync();
+        var saved = new TodoEntity { Title = "default route" };
+        var deleted = new TodoEntity { Title = "delete from default route" };
+        await deleted.Save();
+
+        using (EntityContext.Transaction("captured-default-route"))
+        {
+            await saved.Save();
+            await deleted.Remove();
+            using (EntityContext.Adapter("json"))
+            using (EntityContext.Partition("different-at-commit")) await EntityContext.Commit();
+        }
+
+        (await TodoEntity.Get(saved.Id))!.Title.Should().Be("default route");
+        (await TodoEntity.Get(deleted.Id)).Should().BeNull();
+        using (EntityContext.Adapter("json"))
+        using (EntityContext.Partition("different-at-commit"))
+            (await TodoEntity.Get(saved.Id)).Should().BeNull();
+    }
+
+    [Fact]
     public async Task Transaction_defers_entity_saves_until_commit()
     {
         await using var runtime = await DataCoreRuntimeFixture.CreateAsync();

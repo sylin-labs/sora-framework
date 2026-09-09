@@ -7,7 +7,7 @@ namespace Koan.Jobs;
 /// <summary>
 /// The enqueued unit of work and the single source of truth — one ledger entry = (work-item × action × lifecycle).
 /// Persisted as <c>Entity&lt;JobRecord&gt;</c> so the durable tier rides the existing data layer (no per-DB job
-/// adapters; durability follows the ambient adapter). The <c>Id</c> is the Job id; <see cref="WorkId"/>
+/// adapters; durability follows the host default store). The <c>Id</c> is the Job id; <see cref="WorkId"/>
 /// points at the work-item entity. JOBS-0005 §3/§7/§9.
 /// </summary>
 public sealed class JobRecord : Entity<JobRecord>, IAmbientExempt
@@ -21,6 +21,15 @@ public sealed class JobRecord : Entity<JobRecord>, IAmbientExempt
     /// <summary>Id of the work-item entity this job acts on.</summary>
     [Index(Group = "ix_jobs_wt_workid", Order = 1)]
     public string WorkId { get; set; } = "";
+
+    /// <summary>Named data source of the work item. Null denotes the host default.</summary>
+    public string? WorkSource { get; set; }
+
+    /// <summary>Data adapter override of the work item. Mutually exclusive with WorkSource.</summary>
+    public string? WorkAdapter { get; set; }
+
+    /// <summary>Physical partition of the work item. Null denotes the default partition.</summary>
+    public string? WorkPartition { get; set; }
 
     /// <summary>The action/stage being executed (empty for single-action jobs).</summary>
     public string Action { get; set; } = "";

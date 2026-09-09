@@ -43,6 +43,30 @@ caller and owns no fleet roster, so reservation cannot be honored and is never s
 item and a read-only orchestration snapshot. The coordinator persists the work item before enqueue and
 after handler mutation. The ledger stores orchestration state separately as `JobRecord` entities.
 
+### Work address and scheduling placement
+
+The coordinator captures an immutable `EntityContext` before the first asynchronous boundary, together
+with the opaque context carrier. Deferred source enumeration and each accepted work item restore that
+snapshot. `JobRecord.WorkSource`, `WorkAdapter` and `WorkPartition` persist only the logical data address;
+transactions and cache controls are never serialized. Missing address fields on legacy records mean
+the host default. Source and adapter selectors are case-normalized; partition spelling is preserved.
+
+The built-in durable ledger clears source, adapter and partition at its I/O boundary, retaining the
+submission transaction coordinator. Work persistence, ledger append and wake stamp therefore retain
+the existing provider transaction guarantee. Worker execution restores the work address without a
+submission transaction. Successors inherit the original record address. Invalid addresses are rejected
+before handler execution through the existing context-failure settlement.
+
+Ledger, gates, wake stamp, roster and metrics reside in the default host data store. `IAmbientExempt`
+continues to govern managed ambient fields only; this change does not alter physical routing for other
+Entity types. Existing partitioned ledger collections require operator reconciliation before upgrade;
+Jobs does not discover or silently move records between stores.
+
+Per-work status/cancel and exclusivity include the full work address. Coalescing folds the address
+through `AmbientAxisComposer`, preserving the exact old coalesce key for the default address.
+`JobQuery` address fields use null as a wildcard and empty string as the default address, including
+legacy null or absent fields. Explicit gates retain their declared shared resource identity.
+
 Use:
 
 - `item.Job.Submit/Status/Cancel` for one work item;

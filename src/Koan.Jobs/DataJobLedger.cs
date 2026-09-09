@@ -11,7 +11,7 @@ namespace Koan.Jobs;
 
 /// <summary>
 /// Durable <see cref="IJobLedger"/> riding the existing data layer — the ledger and gates are each
-/// an <see cref="Koan.Data.Core.Model.Entity{T}"/> persisted via the ambient adapter, so there are no per-DB job
+/// an <see cref="Koan.Data.Core.Model.Entity{T}"/> persisted in the host default store, so there are no per-DB job
 /// adapters and durability follows whatever data provider is present (JOBS-0005 §7/§8). A provider-declared
 /// conditional replace is the atomic claim primitive; adapters without it retain the honest optimistic
 /// at-least-once fallback.
@@ -48,20 +48,27 @@ internal sealed class DataJobLedger : IJobLedger
 
     public async Task Append(JobRecord record, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         await JobRecord.Upsert(record, ct);
         await WakeStamp.TryBump(ct);   // JOBS-0009: same ambient transaction — rollback never moves the stamp
     }
 
     public async Task AppendMany(IReadOnlyCollection<JobRecord> records, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         await JobRecord.UpsertMany(records, ct);
         await WakeStamp.TryBump(ct);   // one bump per batch, not per row
     }
 
-    public Task<JobRecord?> Get(string jobId, CancellationToken ct) => JobRecord.Get(jobId, ct);
+    public async Task<JobRecord?> Get(string jobId, CancellationToken ct)
+    {
+        using var storageScope = JobsStorageScope.Enter();
+        return await JobRecord.Get(jobId, ct);
+    }
 
     public async Task<JobRecord?> FindActiveByCoalesceKey(string workType, string coalesceKey, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         // Queued-only: a Running job does not block a new submit — the submit queues a trailing execution
         // (at most 1 running + 1 queued per coalesce key, the debounce / trailing-edge pattern).
         var hits = await JobRecord.Query(r => r.WorkType == workType && r.CoalesceKey == coalesceKey && r.Status == JobStatus.Queued, ct);
@@ -84,6 +91,7 @@ internal sealed class DataJobLedger : IJobLedger
         IReadOnlyCollection<string> saturatedLanes, CancellationToken ct,
         IReadOnlyDictionary<string, PoolDispatchContext>? pools = null)
     {
+        using var storageScope = JobsStorageScope.Enter();
         for (var attempt = 1; ; attempt++)
         {
             ct.ThrowIfCancellationRequested();
@@ -116,7 +124,7 @@ internal sealed class DataJobLedger : IJobLedger
     {
         // One Running snapshot serves both the §17.2 exclusivity probe and the pool member-slot tally (JOBS-0007).
         var running = await JobRecord.Query(r => r.Status == JobStatus.Running, ct);
-        var busy = running.Select(r => (r.WorkType, r.WorkId)).ToHashSet();
+        var busy = running.Select(JobDataRoute.Identity).ToHashSet();
         var memberSlots = pools is { Count: > 0 } ? BuildMemberSlots(pools, running) : null;
         var claimablePools = memberSlots is null ? null : ClaimablePools(pools!, memberSlots);
         var gatedKeys = (await ActiveGates(now, ct)).Select(g => g.GateKey).ToHashSet(StringComparer.Ordinal);
@@ -233,12 +241,17 @@ internal sealed class DataJobLedger : IJobLedger
         return null;
     }
 
-    public Task Update(JobRecord record, CancellationToken ct) => JobRecord.Upsert(record, ct);
+    public async Task Update(JobRecord record, CancellationToken ct)
+    {
+        using var storageScope = JobsStorageScope.Enter();
+        await JobRecord.Upsert(record, ct);
+    }
 
     /// <summary>Capability-graded like the claim: guarded CAS where <see cref="DataCaps.Write.ConditionalReplace"/>
     /// exists, optimistic write-then-verify otherwise — a false return means another claimant owns the row.</summary>
     public async Task<bool> TryRenewLease(string jobId, string owner, DateTimeOffset leaseUntil, DateTimeOffset now, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         var current = await JobRecord.Get(jobId, ct);
         if (current is not { Status: JobStatus.Running } || !string.Equals(current.Owner, owner, StringComparison.Ordinal))
             return false;
@@ -265,6 +278,7 @@ internal sealed class DataJobLedger : IJobLedger
     /// node that reclaimed the row.</summary>
     public async Task<bool> TrySettle(JobRecord record, string expectedOwner, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         var cas = Data<JobRecord, string>.Capabilities.Has(DataCaps.Write.ConditionalReplace)
             ? Data<JobRecord, string>.As<IConditionalWriteRepository<JobRecord, string>>()
             : null;
@@ -292,6 +306,7 @@ internal sealed class DataJobLedger : IJobLedger
     /// verify-then-write otherwise. Applies only while the row is Queued and unreserved.</summary>
     public async Task<bool> TryReserve(string jobId, string hand, DateTimeOffset reservedUntil, DateTimeOffset now, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         var cas = Data<JobRecord, string>.Capabilities.Has(DataCaps.Write.ConditionalReplace)
             ? Data<JobRecord, string>.As<IConditionalWriteRepository<JobRecord, string>>()
             : null;
@@ -318,6 +333,7 @@ internal sealed class DataJobLedger : IJobLedger
 
     public async Task<IReadOnlyList<JobRecord>> ReservationCandidates(DateTimeOffset now, int limit, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         if (limit <= 0) return [];
         // Pushed down and ordered like the claim head — one bounded indexed seek per dispatch pass.
         var sort = SortBuilder<JobRecord>.Build(s => s.OrderBy(r => r.VisibleAt).ThenBy(r => r.FirstSubmittedAt));
@@ -326,11 +342,15 @@ internal sealed class DataJobLedger : IJobLedger
             QueryDefinition.All.WithSort(sort).WithPagination(1, limit), ct);
     }
 
-    public Task<IReadOnlyList<JobRecord>> Reservations(CancellationToken ct)
-        => JobRecord.Query(r => r.Status == JobStatus.Queued && r.ReservedFor != null, ct);
+    public async Task<IReadOnlyList<JobRecord>> Reservations(CancellationToken ct)
+    {
+        using var storageScope = JobsStorageScope.Enter();
+        return await JobRecord.Query(r => r.Status == JobStatus.Queued && r.ReservedFor != null, ct);
+    }
 
     public async Task Progress(string jobId, double fraction, string? message, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         var r = await JobRecord.Get(jobId, ct);
         if (r is null) return;
         r.ProgressFraction = fraction;
@@ -340,28 +360,38 @@ internal sealed class DataJobLedger : IJobLedger
 
     public async Task<IReadOnlyList<JobRecord>> Stuck(DateTimeOffset now, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         var running = await JobRecord.Query(r => r.Status == JobStatus.Running, ct);
         return running.Where(r => r.LeaseUntil is { } l && l < now).ToList();
     }
 
-    public Task<IReadOnlyList<JobRecord>> Running(CancellationToken ct)
-        => JobRecord.Query(r => r.Status == JobStatus.Running, ct);
+    public async Task<IReadOnlyList<JobRecord>> Running(CancellationToken ct)
+    {
+        using var storageScope = JobsStorageScope.Enter();
+        return await JobRecord.Query(r => r.Status == JobStatus.Running, ct);
+    }
 
-    public Task<IReadOnlyList<JobRecord>> NonTerminal(CancellationToken ct)
-        // Pushed down (§19.3): Status < Completed — terminals are 4..7, so one comparison, not All() + in-memory filter.
-        => JobRecord.Query(JobLedgerPredicates.NonTerminal(), ct);
+    public async Task<IReadOnlyList<JobRecord>> NonTerminal(CancellationToken ct)
+    {
+        using var storageScope = JobsStorageScope.Enter();
+        return await JobRecord.Query(JobLedgerPredicates.NonTerminal(), ct);
+    }
 
-    public Task<IReadOnlyList<JobRecord>> InStage(string workType, string action, CancellationToken ct)
-        // Pushed down (§19.3): the full (WorkType, Action, Status==Queued) predicate, not WorkType + in-memory filter.
-        => JobRecord.Query(r => r.WorkType == workType && r.Action == action && r.Status == JobStatus.Queued, ct);
+    public async Task<IReadOnlyList<JobRecord>> InStage(string workType, string action, CancellationToken ct)
+    {
+        using var storageScope = JobsStorageScope.Enter();
+        return await JobRecord.Query(r => r.WorkType == workType && r.Action == action && r.Status == JobStatus.Queued, ct);
+    }
 
-    public Task<IReadOnlyList<JobRecord>> Query(JobQuery query, CancellationToken ct)
-        // Pushed down (§19.3): the declarative facade query becomes a tight conjunctive predicate the store evaluates,
-        // so WithStatus(s) returns only the matching rows — not every JobRecord of the work-type.
-        => JobRecord.Query(JobLedgerPredicates.ForQuery(query), ct);
+    public async Task<IReadOnlyList<JobRecord>> Query(JobQuery query, CancellationToken ct)
+    {
+        using var storageScope = JobsStorageScope.Enter();
+        return await JobRecord.Query(JobLedgerPredicates.ForQuery(query), ct);
+    }
 
     public async Task SetGate(string gateKey, DateTimeOffset releaseAt, string? reason, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         var existing = (await JobGateRecord.Query(g => g.GateKey == gateKey, ct)).FirstOrDefault();
         if (existing is not null)
         {
@@ -374,13 +404,15 @@ internal sealed class DataJobLedger : IJobLedger
         await JobGateRecord.Upsert(new JobGateRecord { GateKey = gateKey, ReleaseAt = releaseAt, Reason = reason }, ct);
     }
 
-    public Task<IReadOnlyList<JobGateRecord>> ActiveGates(DateTimeOffset now, CancellationToken ct)
-        // Single type since PMC-060 unified the former read-shape POCO: materialized fresh from the store like
-        // every other read; only still-relevant rows (> now) are returned.
-        => JobGateRecord.Query(g => g.ReleaseAt > now, ct);
+    public async Task<IReadOnlyList<JobGateRecord>> ActiveGates(DateTimeOffset now, CancellationToken ct)
+    {
+        using var storageScope = JobsStorageScope.Enter();
+        return await JobGateRecord.Query(g => g.ReleaseAt > now, ct);
+    }
 
     public async Task<int> PurgeArchivable(DateTimeOffset olderThan, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         // Pushed down (§19.3): the LastSettledAt cutoff is in the predicate, so the store returns only the stale
         // benign-terminal rows — not every Completed/Cancelled row to be filtered in memory.
         var stale = await JobRecord.Query(
@@ -391,6 +423,7 @@ internal sealed class DataJobLedger : IJobLedger
 
     public async Task<int> PurgeFailed(DateTimeOffset olderThan, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         // §19.3 retention completion: Failed/Dead were retained forever; bound them by age (replayable until then).
         var stale = await JobRecord.Query(
             r => (r.Status == JobStatus.Failed || r.Status == JobStatus.Dead) && r.LastSettledAt < olderThan, ct);
@@ -400,6 +433,7 @@ internal sealed class DataJobLedger : IJobLedger
 
     public async Task<int> TrimTerminal(string workType, int keep, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         if (keep <= 0) return 0;
         // The keep-th newest terminal row marks the cutoff; terminal rows settled before it are excess. Two pushed
         // queries (a bounded page to find the cutoff, then a predicate delete) — no full materialize of the work-type.
@@ -415,13 +449,16 @@ internal sealed class DataJobLedger : IJobLedger
     }
 
     public async Task<long> CountActive(string workType, CancellationToken ct)
-        // Pushed COUNT (one row materialized): cheap enough to run per work-type each archival sweep.
-        => (await JobRecord.QueryWithCount(
+    {
+        using var storageScope = JobsStorageScope.Enter();
+        return (await JobRecord.QueryWithCount(
             JobLedgerPredicates.ActiveOf(workType),
             QueryDefinition.All.WithPagination(1, 1), ct)).TotalCount;
+    }
 
     public async Task<JobsHealthSnapshot> HealthSnapshot(DateTimeOffset now, CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         // Cheap + index-served: pushed COUNTs over the single-column Status index + one LIMIT-1 ordered oldest-due seek.
         // No per-lane fan-out — a health probe must not become a scan-storm over the backlog it is meant to observe.
         var queued = (await JobRecord.QueryWithCount(r => r.Status == JobStatus.Queued, QueryDefinition.All.WithPagination(1, 1), ct)).TotalCount;
@@ -485,7 +522,7 @@ internal sealed class DataJobLedger : IJobLedger
     private async Task<JobRecord?> HydrateLaneHead(
         string lane, string owner, DateTimeOffset now, IReadOnlyCollection<string> saturatedLanes,
         HashSet<string>? claimablePools, HashSet<string> gatedKeys,
-        HashSet<(string WorkType, string WorkId)> busy, CancellationToken ct)
+        HashSet<(string Type, string Id, JobDataRoute Route)> busy, CancellationToken ct)
     {
         var batchSize = Math.Max(1, _options.ClaimScanBatch);
         var sort = SortBuilder<JobRecord>.Build(s => s.OrderBy(r => r.VisibleAt).ThenBy(r => r.FirstSubmittedAt));
@@ -511,12 +548,12 @@ internal sealed class DataJobLedger : IJobLedger
     /// its <see cref="JobRecord.GateKey"/> is the elected member (null while queued), not a cooperative-backoff key.</summary>
     private static bool IsClaimable(JobRecord r, string owner, DateTimeOffset now,
         IReadOnlyCollection<string> saturatedLanes, HashSet<string>? claimablePools,
-        HashSet<string> gatedKeys, HashSet<(string WorkType, string WorkId)> busy)
+        HashSet<string> gatedKeys, HashSet<(string Type, string Id, JobDataRoute Route)> busy)
     {
         if (!(r.ReservedFor == null || r.ReservedFor == owner || (r.ReservedUntil != null && r.ReservedUntil < now)))
             return false;
         if (saturatedLanes.Contains(r.Lane)) return false;
-        if (r.Exclusive && busy.Contains((r.WorkType, r.WorkId))) return false;
+        if (r.Exclusive && busy.Contains(JobDataRoute.Identity(r))) return false;
         if (r.PoolKey is not null)
             return claimablePools is not null && claimablePools.Contains(r.PoolKey);
         return r.GateKey is null || !gatedKeys.Contains(r.GateKey);

@@ -14,6 +14,20 @@ namespace Koan.Tests.Data.Core.Specs.Routing;
 public class WithContextInheritanceSpec
 {
     [Fact]
+    public void Empty_route_overrides_clear_axes_to_the_same_default_as_an_absent_context()
+    {
+        using var outer = EntityContext.With(source: "analytics", partition: "fr");
+        using (EntityContext.With(source: "", adapter: "json", partition: ""))
+        {
+            EntityContext.Current!.Source.Should().BeNull();
+            EntityContext.Current.Adapter.Should().Be("json");
+            EntityContext.Current.Partition.Should().BeNull();
+        }
+        EntityContext.Current!.Source.Should().Be("analytics");
+        EntityContext.Current.Partition.Should().Be("fr");
+    }
+
+    [Fact]
     public void Omitted_dimensions_inherit_the_ambient_context()
     {
         using var outer = EntityContext.With(source: "analytics", partition: "archive");

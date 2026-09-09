@@ -37,6 +37,7 @@ internal sealed class JobMetricsRecorder
     /// <see cref="Record"/> during the await is preserved.</summary>
     public async Task FlushAsync(CancellationToken ct = default)
     {
+        using var storageScope = JobsStorageScope.Enter();
         if (!_enabled || _deltas.IsEmpty) return;
         var now = _clock.GetUtcNow();
         foreach (var key in _deltas.Keys.ToArray())
@@ -57,6 +58,7 @@ internal sealed class JobMetricsRecorder
     /// <summary>Drop rollup rows last flushed before the cutoff (bucket-age retention).</summary>
     public async Task<int> PurgeAsync(DateTimeOffset olderThan, CancellationToken ct = default)
     {
+        using var storageScope = JobsStorageScope.Enter();
         if (!_enabled) return 0;
         var stale = await JobMetric.Query(m => m.LastFlushedAt < olderThan, ct);
         foreach (var r in stale) await JobMetric.Remove(r.Id, ct);

@@ -18,6 +18,7 @@ public static class JobMetrics
         DateTimeOffset to,
         CancellationToken ct = default)
     {
+        using var storageScope = JobsStorageScope.Enter();
         var fromBucket = JobMetric.BucketOf(from);
         var toBucket = JobMetric.BucketOf(to);
         // WorkType equality is pushed (indexed); range/grouping run over the small per-work-type rollup.

@@ -169,11 +169,19 @@ internal sealed class JobOrchestrator
         // fail-open in a wrong/absent context. A null/empty bag explicitly suppresses every registered axis (the §1b
         // request guard owns the unscoped-write refusal under Closed; dev-fallback under Open).
         IDisposable ambientScope;
+        IDisposable? dataScope = null;
         try
         {
+            dataScope = JobDataRoute.From(rec).Restore();
             ambientScope = _contextPlan.RestoreForExecution(binding.ClrType, rec.AmbientCarrier);
         }
-        catch (Exception ex) { await SettleCarrierFailureAsync(rec, claimedOwner, ex); return null; }
+        catch (Exception ex)
+        {
+            dataScope?.Dispose();
+            await SettleCarrierFailureAsync(rec, claimedOwner, ex);
+            return null;
+        }
+        using var _data = dataScope;
         using var _ambient = ambientScope;
 
         object? workItem;
@@ -381,7 +389,7 @@ internal sealed class JobOrchestrator
             // Chain stages inherit the gate key resolved at submit (the chain's gate pool is fixed — §18) and the
             // ambient carrier (ARCH-0100 §7): the successor is appended here by the orchestrator, NOT the
             // coordinator, so capture-at-submit never fires for it — propagate the parent's bag verbatim.
-            var nextRec = JobRecordFactory.Create(binding, nextPolicy, workItem, rec.WorkId, next, now, null, rec.CorrelationId, rec.GateKey, rec.AmbientCarrier);
+            var nextRec = JobRecordFactory.Create(binding, nextPolicy, workItem, rec.WorkId, next, now, null, rec.CorrelationId, rec.GateKey, rec.AmbientCarrier, JobDataRoute.From(rec));
             await _ledger.Append(nextRec, CancellationToken.None);
         }
     }
@@ -417,7 +425,7 @@ internal sealed class JobOrchestrator
             if (wi is not null)
             {
                 var nextPolicy = binding.ResolvePolicy(next, _options);
-                await _ledger.Append(JobRecordFactory.Create(binding, nextPolicy, wi, rec.WorkId, next, now, null, rec.CorrelationId, rec.GateKey, rec.AmbientCarrier), CancellationToken.None);
+                await _ledger.Append(JobRecordFactory.Create(binding, nextPolicy, wi, rec.WorkId, next, now, null, rec.CorrelationId, rec.GateKey, rec.AmbientCarrier, JobDataRoute.From(rec)), CancellationToken.None);
             }
         }
     }
@@ -573,6 +581,7 @@ internal sealed class JobOrchestrator
     /// <summary>Reclaim jobs whose lease lapsed (reaper sweep): revert Running → Queued for re-dispatch.</summary>
     public async Task ReapAsync(CancellationToken ct = default)
     {
+        using var storageScope = JobsStorageScope.Enter();
         var now = _clock.GetUtcNow();
         foreach (var stuck in await _ledger.Stuck(now, ct))
         {
@@ -619,6 +628,7 @@ internal sealed class JobOrchestrator
     /// Self-throttling to <c>WorkerHeartbeatInterval</c>; safe to call every loop iteration.</summary>
     public async Task BeatAsync(CancellationToken ct = default)
     {
+        using var storageScope = JobsStorageScope.Enter();
         var now = _clock.GetUtcNow();
         var node = await WorkerNode.Get(_owner, ct);
         if (node is null)
@@ -639,6 +649,7 @@ internal sealed class JobOrchestrator
     /// waiting out the death timeout on a planned shutdown.</summary>
     public async Task ResignAsync(CancellationToken ct = default)
     {
+        using var storageScope = JobsStorageScope.Enter();
         var node = await WorkerNode.Get(_owner, ct);
         if (node is not null)
             await node.Remove(ct);
@@ -657,6 +668,7 @@ internal sealed class JobOrchestrator
     /// not lifecycle.</para></summary>
     public async Task AssignReservationsAsync(CancellationToken ct = default)
     {
+        using var storageScope = JobsStorageScope.Enter();
         if (_options.DispatchMode != JobDispatchMode.Reservation) return;
         if (_options.WorkerDeathTimeout <= TimeSpan.Zero) return;
 

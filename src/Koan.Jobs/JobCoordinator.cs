@@ -115,6 +115,7 @@ internal sealed class JobCoordinator : IJobCoordinator
         {
             // Re-establish the terminal's captured logical context for deferred source enumeration and every
             // work-item save. A source cannot accidentally make one submission drift onto the worker flow's axes.
+            using var dataScope = KoanContext.Push(scope.DataContext);
             using var contextScope = _contextPlan.RestoreForSubmit(typeof(T), scope.Carrier);
             await foreach (var workItem in workItems.WithCancellation(ct).ConfigureAwait(false))
             {
@@ -196,8 +197,9 @@ internal sealed class JobCoordinator : IJobCoordinator
         // creates a fresh instance via binding.NewSingleton at execution time (no store round-trip on the hot path).
         var workItem = binding.NewSingleton(Constants.Work.SingletonId);
         var carrier = _contextPlan.Capture(binding.ClrType);
+        var route = JobDataRoute.From(EntityContext.Current);
 
-        var coalesceKey = JobCoalesce.FoldAmbient(binding.CoalesceKey(workItem, action), carrier);
+        var coalesceKey = JobCoalesce.FoldAmbient(binding.CoalesceKey(workItem, action), carrier, route);
         if (coalesceKey is not null)
         {
             var existing = await _ledger.FindActiveByCoalesceKey(binding.WorkType, coalesceKey, ct);
@@ -205,7 +207,7 @@ internal sealed class JobCoordinator : IJobCoordinator
         }
 
         var gateKey = await ResolveGateKey(binding, workItem, ct);
-        var rec = JobRecordFactory.Create(binding, policy, workItem, Constants.Work.SingletonId, action, now, null, Correlation(), gateKey, carrier);
+        var rec = JobRecordFactory.Create(binding, policy, workItem, Constants.Work.SingletonId, action, now, null, Correlation(), gateKey, carrier, route);
         await _ledger.Append(rec, ct);
 
         if (!EntityContext.InTransaction) _wake.Notify();
@@ -215,7 +217,7 @@ internal sealed class JobCoordinator : IJobCoordinator
 
     public async Task CancelWorkAsync(string workType, string workId, CancellationToken ct)
     {
-        var jobs = await _ledger.Query(new JobQuery(WorkType: workType, WorkId: workId), ct);
+        var jobs = await _ledger.Query(JobDataRoute.From(EntityContext.Current).Query(workType, workId), ct);
         var now = _clock.GetUtcNow();
         foreach (var rec in jobs)
         {
@@ -238,7 +240,7 @@ internal sealed class JobCoordinator : IJobCoordinator
 
     public async Task<JobStatus?> StatusAsync(string workType, string workId, CancellationToken ct)
     {
-        var jobs = await _ledger.Query(new JobQuery(WorkType: workType, WorkId: workId), ct);
+        var jobs = await _ledger.Query(JobDataRoute.From(EntityContext.Current).Query(workType, workId), ct);
         if (jobs.Count == 0) return null;
         return jobs.OrderByDescending(j => j.FirstSubmittedAt).First().Status;
     }
@@ -265,6 +267,7 @@ internal sealed class JobCoordinator : IJobCoordinator
             _clock.GetUtcNow(),
             Correlation(),
             _contextPlan.Capture(workType),
+            EntityContext.Current ?? new EntityContext.ContextState(),
             EntityContext.InTransaction);
 
     private async Task<AcceptedSubmission> Accept(
@@ -275,13 +278,16 @@ internal sealed class JobCoordinator : IJobCoordinator
         CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(workItem);
+        using var dataScope = KoanContext.Push(scope.DataContext);
+        using var contextScope = _contextPlan.RestoreForSubmit(workItem.GetType(), scope.Carrier);
+        var route = JobDataRoute.From(scope.DataContext);
         var binding = _registry.Require(workItem.GetType().FullName!);
         var policy = binding.ResolvePolicy(action, _options);
         var workId = binding.GetId(workItem);
 
         // Coalesce before any Entity save. The captured ambient participates in the key, so distinct logical
         // contexts cannot collapse onto one another merely because a source changes flow while enumerating.
-        var coalesceKey = JobCoalesce.FoldAmbient(binding.CoalesceKey(workItem, action), scope.Carrier);
+        var coalesceKey = JobCoalesce.FoldAmbient(binding.CoalesceKey(workItem, action), scope.Carrier, route);
         if (coalesceKey is not null)
         {
             var existing = await _ledger.FindActiveByCoalesceKey(binding.WorkType, coalesceKey, ct)
@@ -312,7 +318,8 @@ internal sealed class JobCoordinator : IJobCoordinator
             after,
             scope.Correlation,
             gateKey,
-            scope.Carrier);
+            scope.Carrier,
+            route);
         await _ledger.Append(record, ct).ConfigureAwait(false);
         return new AcceptedSubmission(Handle(record.Id), Coalesced: false);
     }
@@ -343,6 +350,7 @@ internal sealed class JobCoordinator : IJobCoordinator
         DateTimeOffset Now,
         string? Correlation,
         IReadOnlyDictionary<string, string>? Carrier,
+        EntityContext.ContextState DataContext,
         bool PendingCommit);
 
     private readonly record struct AcceptedSubmission(JobHandle Handle, bool Coalesced);

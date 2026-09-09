@@ -22,6 +22,7 @@ public sealed class WakeStamp : Entity<WakeStamp>, IAmbientExempt
     /// latency hint, not a correctness write; the probe's slow fallback drains on <c>PollInterval</c> anyway.</summary>
     internal static async Task TryBump(CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         try
         {
             var stamp = await WakeStamp.Get(SingletonId, ct);
@@ -44,6 +45,7 @@ public sealed class WakeStamp : Entity<WakeStamp>, IAmbientExempt
     /// <summary>Current stamp version, or -1 when the read fails (callers treat unknown as no-signal).</summary>
     internal static async Task<long> ReadVersion(CancellationToken ct)
     {
+        using var storageScope = JobsStorageScope.Enter();
         try
         {
             return (await WakeStamp.Get(SingletonId, ct))?.Version ?? 0;

@@ -14,9 +14,13 @@ public sealed class MongoJobsFixture : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        _container = new MongoDbBuilder("mongo:8.3.4").Build();
-        await _container.StartAsync();
-        var cs = _container.GetConnectionString();
+        var cs = Environment.GetEnvironmentVariable("Koan_MONGO__CONNECTION_STRING");
+        if (string.IsNullOrWhiteSpace(cs))
+        {
+            _container = new MongoDbBuilder("mongo:8.3.4").Build();
+            await _container.StartAsync();
+            cs = _container.GetConnectionString();
+        }
         Settings = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             ["Koan:Environment"] = "Test",

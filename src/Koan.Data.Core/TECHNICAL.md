@@ -202,6 +202,9 @@ validation:
   validated in native positions, then remapped to logical builder order.
 - The shared transaction coordinator is sequential deferred coordination only. Its failure reports completed
   operation count, commit outcome, retry disposition, and replay disposition; it does not claim native atomicity.
+- Deferred entity and vector operations restore their captured source, adapter and partition exactly during
+  route resolution and execution. A captured default clears the commit caller's corresponding routing axis.
+  Executing a tracked operation suppresses the transaction to prevent recursive enlistment.
 
 ## Synchronous console-host ownership
 

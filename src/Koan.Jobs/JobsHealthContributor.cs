@@ -19,6 +19,7 @@ internal sealed class JobsHealthContributor(IJobLedger ledger, IOptions<JobsOpti
 
     public async Task<HealthReport> Check(CancellationToken ct = default)
     {
+        using var storageScope = JobsStorageScope.Enter();
         try
         {
             var now = clock.GetUtcNow();

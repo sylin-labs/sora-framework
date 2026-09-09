@@ -58,6 +58,13 @@ explicitly suppressed. Unknown axes or invalid carrier data dead-letter the job 
 handler code. Tenant and subject values therefore survive a durable hop without Jobs naming either
 concept or requiring application plumbing.
 
+Submission also preserves the work item's `EntityContext` source, adapter and partition. The worker
+restores this address before loading, executing and saving work, including retries and chained stages.
+Scheduling records, gates, wake stamps, worker roster and metrics use the host's default Jobs store.
+Submitting in a locale partition therefore cannot hide a job from the central worker. Work-specific
+status, cancellation, coalescing and exclusivity distinguish different data addresses. Type-wide
+dashboard queries span addresses unless their `JobQuery` includes address filters.
+
 ## Capability ladder
 
 | Composed infrastructure | Elected behavior |

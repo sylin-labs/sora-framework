@@ -48,9 +48,10 @@ internal sealed class SaveOperation<TEntity, TKey> : ITrackedOperation
         var partition = _partition ?? _context.Partition;
 
         using var _ = EntityContext.With(
-            source: string.IsNullOrWhiteSpace(_context.Source) ? null : _context.Source,
-            adapter: string.IsNullOrWhiteSpace(_context.Adapter) ? null : _context.Adapter,
-            partition: partition);
+            source: _context.Source ?? "",
+            adapter: _context.Adapter ?? "",
+            partition: partition ?? "",
+            preserveTransaction: false);
 
         await Data<TEntity, TKey>.Upsert(_entity, ct);
     }
@@ -63,9 +64,9 @@ internal sealed class SaveOperation<TEntity, TKey> : ITrackedOperation
     public DataRouteBinding? ResolveDataBinding(IServiceProvider services)
     {
         using var _ = EntityContext.With(
-            source: string.IsNullOrWhiteSpace(_context.Source) ? null : _context.Source,
-            adapter: string.IsNullOrWhiteSpace(_context.Adapter) ? null : _context.Adapter,
-            partition: _partition ?? _context.Partition,
+            source: _context.Source ?? "",
+            adapter: _context.Adapter ?? "",
+            partition: _partition ?? _context.Partition ?? "",
             preserveTransaction: false);
         return AdapterResolver.ResolveDecisionForEntity<TEntity>(
             services,
@@ -96,9 +97,10 @@ internal sealed class DeleteOperation<TEntity, TKey> : ITrackedOperation
         var partition = _partition ?? _context.Partition;
 
         using var _ = EntityContext.With(
-            source: string.IsNullOrWhiteSpace(_context.Source) ? null : _context.Source,
-            adapter: string.IsNullOrWhiteSpace(_context.Adapter) ? null : _context.Adapter,
-            partition: partition);
+            source: _context.Source ?? "",
+            adapter: _context.Adapter ?? "",
+            partition: partition ?? "",
+            preserveTransaction: false);
 
         await Data<TEntity, TKey>.Delete(_id, ct);
     }
@@ -111,9 +113,9 @@ internal sealed class DeleteOperation<TEntity, TKey> : ITrackedOperation
     public DataRouteBinding? ResolveDataBinding(IServiceProvider services)
     {
         using var _ = EntityContext.With(
-            source: string.IsNullOrWhiteSpace(_context.Source) ? null : _context.Source,
-            adapter: string.IsNullOrWhiteSpace(_context.Adapter) ? null : _context.Adapter,
-            partition: _partition ?? _context.Partition,
+            source: _context.Source ?? "",
+            adapter: _context.Adapter ?? "",
+            partition: _partition ?? _context.Partition ?? "",
             preserveTransaction: false);
         return AdapterResolver.ResolveDecisionForEntity<TEntity>(
             services,
@@ -153,9 +155,10 @@ internal sealed class VectorSaveOperation<TEntity, TKey> : ITrackedOperation
         var partition = _partition ?? _context.Partition;
 
         using var _ = EntityContext.With(
-            source: string.IsNullOrWhiteSpace(_context.Source) ? null : _context.Source,
-            adapter: string.IsNullOrWhiteSpace(_context.Adapter) ? null : _context.Adapter,
-            partition: partition);
+            source: _context.Source ?? "",
+            adapter: _context.Adapter ?? "",
+            partition: partition ?? "",
+            preserveTransaction: false);
 
         // Use reflection to avoid circular dependency between Core and Vector assemblies
         var vectorServiceType = Type.GetType("Koan.Data.Vector.IVectorService, Koan.Data.Vector");
@@ -220,9 +223,10 @@ internal sealed class VectorDeleteOperation<TEntity, TKey> : ITrackedOperation
         var partition = _partition ?? _context.Partition;
 
         using var _ = EntityContext.With(
-            source: string.IsNullOrWhiteSpace(_context.Source) ? null : _context.Source,
-            adapter: string.IsNullOrWhiteSpace(_context.Adapter) ? null : _context.Adapter,
-            partition: partition);
+            source: _context.Source ?? "",
+            adapter: _context.Adapter ?? "",
+            partition: partition ?? "",
+            preserveTransaction: false);
 
         // Use reflection to avoid circular dependency between Core and Vector assemblies
         var vectorServiceType = Type.GetType("Koan.Data.Vector.IVectorService, Koan.Data.Vector");

@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using Koan.Core;
 using Koan.Core.Observability.Health;
+using Koan.Data.Core;
 using Koan.Jobs;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -18,6 +19,133 @@ public abstract class JobBehaviorSuite
     protected abstract Task<JobsHarness> CreateHostAsync(Action<JobsOptions>? configure = null, Action<IServiceCollection>? configureServices = null);
 
     // --- discovery + edge ---
+
+    [Fact]
+    public async Task invalid_work_address_is_dead_lettered_without_blocking_the_next_job()
+    {
+        await using var host = await CreateHostAsync();
+        var now = host.Clock.GetUtcNow();
+        var invalid = new JobRecord
+        {
+            WorkType = typeof(GreetJob).FullName!, WorkId = "invalid-address",
+            WorkSource = "Default", WorkAdapter = "mongo", Exclusive = true,
+            Status = JobStatus.Queued, Lane = "default", VisibleAt = now, FirstSubmittedAt = now
+        };
+        await host.Ledger.Append(invalid, default);
+        var valid = new GreetJob { Name = "after-invalid-address" };
+        await valid.Job.Submit();
+        await host.Drain();
+        (await host.Ledger.Get(invalid.Id, default))!.Status.Should().Be(JobStatus.Dead);
+        (await GreetJob.Get(valid.Id))!.Greeting.Should().Be("Hello, after-invalid-address");
+    }
+
+    [Fact]
+    public async Task data_address_scopes_coalescing_status_and_cancellation()
+    {
+        await using var host = await CreateHostAsync();
+        var work = new DedupeJob { Key = Guid.NewGuid().ToString("N") };
+        await work.Job.Submit();
+        using (EntityContext.Partition("fr"))
+        {
+            await work.Job.Submit();
+            await work.Job.Submit();
+            await work.Job.Cancel();
+            (await work.Job.Status()).Should().Be(JobStatus.Cancelled);
+        }
+        (await work.Job.Status()).Should().Be(JobStatus.Queued);
+        var records = await host.Ledger.Query(new JobQuery(WorkId: work.Id), default);
+        records.Should().HaveCount(2);
+        records.Single(r => r.WorkPartition is null).CoalesceKey.Should().Be(
+            host.Registry.Require(typeof(DedupeJob).FullName!).CoalesceKey(work, ""),
+            "default-address coalescing remains compatible with existing records");
+        await host.Drain();
+        (await work.Job.Status()).Should().Be(JobStatus.Completed);
+    }
+
+    [Fact]
+    public async Task async_source_cannot_change_the_captured_data_partition()
+    {
+        await using var host = await CreateHostAsync();
+        var first = new GreetJob { Name = "first" };
+        var second = new GreetJob { Name = "second" };
+        async IAsyncEnumerable<GreetJob> Source()
+        {
+            yield return first;
+            using (EntityContext.Partition("de")) yield return second;
+            await Task.CompletedTask;
+        }
+        using (EntityContext.Partition("fr")) await Source().Submit();
+        await host.Drain();
+        using (EntityContext.Partition("fr"))
+        {
+            (await GreetJob.Get(first.Id))!.Greeting.Should().Be("Hello, first");
+            (await GreetJob.Get(second.Id))!.Greeting.Should().Be("Hello, second");
+        }
+        using (EntityContext.Partition("de")) (await GreetJob.Get(second.Id)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task partitioned_success_and_failure_chains_retain_the_work_address()
+    {
+        await using var host = await CreateHostAsync();
+        var pipeline = new Pipeline();
+        var continuation = new ContinueChain();
+        using (EntityContext.Partition("fr"))
+        {
+            await pipeline.Job.Submit(Stage.Fetch);
+            await continuation.Job.Submit(Step.One);
+        }
+        await host.Drain();
+        using (EntityContext.Partition("fr"))
+        {
+            (await Pipeline.Get(pipeline.Id))!.Published.Should().BeTrue();
+            (await ContinueChain.Get(continuation.Id))!.TwoRan.Should().BeTrue();
+        }
+        var records = await host.Ledger.Query(new JobQuery(WorkId: pipeline.Id), default);
+        records.Should().HaveCount(4).And.OnlyContain(r => r.WorkPartition == "fr" && r.Status == JobStatus.Completed);
+    }
+
+    [Fact]
+    public async Task exclusivity_distinguishes_same_id_in_different_data_partitions()
+    {
+        await using var host = await CreateHostAsync();
+        var work = new GreetJob();
+        await work.Job.Submit();
+        using (EntityContext.Partition("fr")) await work.Job.Submit();
+        var now = host.Clock.GetUtcNow();
+        var first = await host.Ledger.ClaimNext("one", now, now.AddMinutes(1), [], default);
+        var second = await host.Ledger.ClaimNext("two", now, now.AddMinutes(1), [], default);
+        first.Should().NotBeNull();
+        second.Should().NotBeNull("different physical work items do not share the exclusivity lock");
+        second!.WorkPartition.Should().NotBe(first!.WorkPartition);
+    }
+
+    [Fact]
+    public async Task partitioned_submission_uses_central_ledger_and_executes_at_original_address()
+    {
+        await using var host = await CreateHostAsync();
+        var root = new GreetJob { Name = "root" };
+        var localized = new GreetJob { Id = root.Id, Name = "localized" };
+        await root.Job.Submit();
+        using (EntityContext.Partition("fr")) await localized.Job.Submit();
+
+        var records = await host.Ledger.Query(new JobQuery(WorkType: typeof(GreetJob).FullName, WorkId: root.Id), default);
+        records.Should().HaveCount(2, "all scheduling rows must be visible to the central worker");
+        using (EntityContext.Partition("unrelated")) await host.Drain();
+
+        (await host.Ledger.Query(new JobQuery(WorkId: root.Id), default))
+            .Should().OnlyContain(record => record.Status == JobStatus.Completed);
+
+        (await GreetJob.Get(root.Id))!.Greeting.Should().Be("Hello, root");
+        using (EntityContext.Partition("fr"))
+        {
+            (await GreetJob.Get(root.Id))!.Greeting.Should().Be("Hello, localized");
+            (await localized.Job.Status()).Should().Be(JobStatus.Completed);
+            (await JobRecord.Query(r => r.WorkId == root.Id)).Should().BeEmpty();
+        }
+        (await host.Ledger.Query(new JobQuery(WorkId: root.Id), default))
+            .Should().OnlyContain(record => record.Status == JobStatus.Completed);
+    }
 
     [Fact]
     public async Task discovery_binds_job_types()

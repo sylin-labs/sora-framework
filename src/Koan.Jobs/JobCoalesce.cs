@@ -17,6 +17,7 @@ namespace Koan.Jobs;
 /// </summary>
 internal static class JobCoalesce
 {
-    public static string? FoldAmbient(string? baseKey, IReadOnlyDictionary<string, string>? ambientCarrier)
-        => baseKey is null ? null : AmbientAxisComposer.Append(baseKey, ambientCarrier);
+    public static string? FoldAmbient(string? baseKey, IReadOnlyDictionary<string, string>? ambientCarrier,
+        JobDataRoute route = default)
+        => baseKey is null ? null : route.Fold(AmbientAxisComposer.Append(baseKey, ambientCarrier));
 }
