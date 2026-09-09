@@ -23,6 +23,8 @@ Managed entities are serialized by an adapter-owned Json.NET configuration, conv
 stored with `_id` as the physical identity. Camel-case member names and Koan's polymorphic discriminator are stable
 adapter decisions. `DateTime` and `DateTimeOffset` are normalized to UTC BSON dates; `TimeSpan`, `DateOnly`, and
 `TimeOnly` use comparable deterministic encodings.
+Typed Json.NET tokens flow directly into BSON without reparsing JSON text, retaining CLR integer widths,
+decimal precision and binary token identity. Legacy numeric widths remain readable when values fit the model.
 
 An explicit `MappingPlan` replaces naming conventions with compiled physical bindings. Reads hydrate through those
 bindings. Writes use `$set` for each declared path and `$setOnInsert` for a mapped `_id`, preserving unbound fields and
@@ -52,6 +54,16 @@ commit.
 realizes declared indexes. `External` verifies existence and performs no DDL. Managed conventions and explicit mapping
 plans both lower their index paths through the same physical decisions used by reads and writes. TTL declarations use
 MongoDB's native zero-second expiry index.
+
+For unnamed declarations, an existing index satisfies the declaration when ordered keys, uniqueness, TTL,
+collation (including collection defaults), coverage and visibility agree. Its historical name is retained.
+Explicit names must match. Incompatible definitions fail with guidance to perform an explicit migration;
+Koan never drops or renames them automatically. Only missing indexes are created. Resolution and names are
+cached in the existing repository/physical-collection readiness gate, shared by concurrent callers and retried
+after failure. Reuse is reported at Debug level once during initialization, without further index I/O on reads.
+
+Duplicate business-key violations retain the Mongo driver error. A duplicate is described as a cross-scope
+write only when a scoped identity lookup proves the existing identity lies outside the current write guard.
 
 ## Inspection and registered operations
 

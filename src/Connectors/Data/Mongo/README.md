@@ -24,6 +24,10 @@ var published = await Book.Query(item => item.Published);
 
 No MongoDB repository, client, serializer registration, or collection bootstrap appears in application code.
 
+Existing equivalent indexes keep their names across framework upgrades when the model does not explicitly name
+them. Koan checks their constraints once per physical collection. Incompatible constraints or explicit names
+require an operator migration; the connector never drops or renames an existing index automatically.
+
 ## Fit a legacy collection without changing the model
 
 ```csharp

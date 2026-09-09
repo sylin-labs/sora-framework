@@ -10,6 +10,7 @@ internal static class Constants
         internal const int Priority = 20;
         internal const int MaximumRoutes = 128;
         internal const int MaximumCollectionsPerRepository = 1024;
+        internal const int DuplicateKeyError = 11000;
     }
 
     internal static class Configuration
@@ -45,6 +46,19 @@ internal static class Constants
     {
         internal const string Identity = "_id";
         internal const string ManagedDocument = "__koan_document";
+    }
+
+    internal static class Index
+    {
+        internal const string Name = "name";
+        internal const string Key = "key";
+        internal const string Unique = "unique";
+        internal const string Sparse = "sparse";
+        internal const string Hidden = "hidden";
+        internal const string PartialFilter = "partialFilterExpression";
+        internal const string Collation = "collation";
+        internal const string Expiry = "expireAfterSeconds";
+        internal const string Options = "options";
     }
 
     internal static class StorageStatus

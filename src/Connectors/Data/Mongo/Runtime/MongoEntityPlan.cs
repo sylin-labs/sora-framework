@@ -70,8 +70,12 @@ internal sealed class MongoEntityPlan<TEntity, TKey>
             return mappedDocument;
         }
 
-        var json = JsonConvert.SerializeObject(entity, entity.GetType(), _json);
-        var payload = JObject.Parse(json);
+        // Retain CLR numeric widths, decimal precision and binary/date tokens through BSON conversion.
+        // A JSON text round-trip erases those distinctions before MongoValues can preserve them.
+        using var writer = new JTokenWriter();
+        JsonSerializer.Create(_json).Serialize(writer, entity, entity.GetType());
+        var payload = writer.Token as JObject
+            ?? throw new InvalidDataException($"MongoDB serialization of '{typeof(TEntity).FullName}' did not produce an object.");
         var identity = payload.Property(_identityJsonName, StringComparison.OrdinalIgnoreCase)
             ?? throw new InvalidDataException(
                 $"MongoDB could not locate identity '{IdentityName}' while serializing '{typeof(TEntity).FullName}'.");

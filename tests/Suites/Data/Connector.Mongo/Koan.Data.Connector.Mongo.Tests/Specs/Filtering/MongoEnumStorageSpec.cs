@@ -8,6 +8,38 @@ public sealed class MongoEnumStorageSpec(MongoFixture fixture, ITestOutputHelper
     : KoanDataSpec<MongoFixture>(fixture, output)
 {
     [Fact]
+    public async Task Native_numeric_width_decimal_and_binary_survive_document_writes()
+    {
+        RequireBackingStore();
+        await using var host = await BootAsync();
+        var partition = NewPartition("native-scalars");
+        using var lease = Lease(partition);
+        var name = StorageNameGenerator.Generate(typeof(NativeDocument), partition,
+            new MongoAdapterFactory().GetNamingCapability(host.Services));
+        var collection = new MongoClient(Fixture.ConnectionString)
+            .GetDatabase(Fixture.Database).GetCollection<BsonDocument>(name);
+        var saved = await new NativeDocument { Quantity = 42, Total = 42L, Amount = 12.34m, Bytes = [1, 2, 3] }.Save();
+        var raw = await collection.Find(new BsonDocument("_id", saved.Id)).SingleAsync();
+        raw["quantity"].BsonType.Should().Be(BsonType.Int32);
+        raw["total"].BsonType.Should().Be(BsonType.Int64);
+        raw["amount"].BsonType.Should().Be(BsonType.Decimal128);
+        raw["bytes"].BsonType.Should().Be(BsonType.Binary);
+        var restored = (await NativeDocument.Get(saved.Id))!;
+        restored.Bytes.Should().Equal(1, 2, 3);
+        restored.Amount.Should().Be(12.34m);
+        await restored.Save();
+        (await collection.Find(new BsonDocument("_id", saved.Id)).SingleAsync()).Equals(raw).Should().BeTrue();
+    }
+
+    private sealed class NativeDocument : Entity<NativeDocument>
+    {
+        public int Quantity { get; set; }
+        public long Total { get; set; }
+        public decimal Amount { get; set; }
+        public byte[] Bytes { get; set; } = [];
+    }
+
+    [Fact]
     public async Task Enum_names_survive_storage_queries_and_replacement_writes()
     {
         RequireBackingStore();

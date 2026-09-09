@@ -10,6 +10,8 @@ using Koan.Data.Core.Optimization;
 using Koan.Data.Connector.Mongo.Runtime;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Koan.Data.Connector.Mongo;
 
@@ -48,7 +50,8 @@ internal sealed class MongoRepository<TEntity, TKey> :
         _clients = clients;
         _entity = new MongoEntityPlan<TEntity, TKey>(services, route.Source, mapping);
         _queries = new MongoQueryCompiler<TEntity, TKey>(_entity);
-        _schema = new MongoSchema<TEntity, TKey>(route, clients, _entity);
+        _schema = new MongoSchema<TEntity, TKey>(route, clients, _entity,
+            services.GetRequiredService<ILogger<MongoSchema<TEntity, TKey>>>());
 
         if (_entity.MappedContainer is { } container &&
             (container.Namespace.Count > 1 ||
@@ -392,9 +395,11 @@ internal sealed class MongoRepository<TEntity, TKey> :
                 DemandAcknowledged(result.IsAcknowledged);
             }
         }
-        catch (MongoWriteException error) when (error.WriteError?.Code == 11000)
+        catch (MongoWriteException error) when (error.WriteError?.Code == Infrastructure.Constants.Provider.DuplicateKeyError)
         {
-            throw CrossScope(model.Id, error);
+            if (await IsCrossScope(collection, _entity.Identity(model), ct).ConfigureAwait(false))
+                throw CrossScope(model.Id, error);
+            throw;
         }
     }
 
@@ -424,10 +429,27 @@ internal sealed class MongoRepository<TEntity, TKey> :
             return result;
         }
         catch (MongoBulkWriteException<BsonDocument> error)
-            when (error.WriteErrors.Any(static item => item.Code == 11000))
+            when (error.WriteErrors.Any(static item => item.Code == Infrastructure.Constants.Provider.DuplicateKeyError))
         {
-            throw CrossScope("batch", error);
+            foreach (var failure in error.WriteErrors.Where(static item => item.Code == Infrastructure.Constants.Provider.DuplicateKeyError))
+                if (writes[failure.Index] is ReplaceOneModel<BsonDocument> replacement
+                    && replacement.Replacement.TryGetValue(Infrastructure.Constants.Storage.Identity, out var identity)
+                    && await IsCrossScope(collection, Builders<BsonDocument>.Filter.Eq(
+                        Infrastructure.Constants.Storage.Identity, identity), ct).ConfigureAwait(false))
+                    throw CrossScope("batch", error);
+            throw;
         }
+    }
+
+    private async Task<bool> IsCrossScope(IMongoCollection<BsonDocument> collection,
+        FilterDefinition<BsonDocument> identity, CancellationToken ct)
+    {
+        var guard = _entity.WriteGuard();
+        var render = new RenderArgs<BsonDocument>(collection.DocumentSerializer,
+            MongoDB.Bson.Serialization.BsonSerializer.SerializerRegistry);
+        if (guard.Render(render).ElementCount == 0) return false;
+        return await collection.Find(Builders<BsonDocument>.Filter.And(identity,
+            Builders<BsonDocument>.Filter.Not(guard))).AnyAsync(ct).ConfigureAwait(false);
     }
 
     private InvalidOperationException CrossScope(object? id, Exception error) => new(
