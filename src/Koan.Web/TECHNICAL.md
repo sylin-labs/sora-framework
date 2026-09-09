@@ -125,3 +125,8 @@ expansion no adapter can serve fails closed with `422`; a response past the safe
 subsequent hooks; `Next()` preserves the current payload. `HookContext.ShortCircuit(...)` stops the
 pipeline immediately and takes precedence over a returned replacement. This applies to both collection
 and model responses through the shared REST/MCP endpoint pipeline.
+
+Every invoked model hook's `ShortCircuit` result is honored. A pre-save, pre-delete or pre-patch stop
+prevents persistence, including dry runs and batch pre-save validation. An after-fetch stop precedes
+relationship expansion. Post-write stops control the response without undoing the committed mutation;
+the mutation is audited before response hooks run.

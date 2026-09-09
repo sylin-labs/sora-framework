@@ -21,6 +21,7 @@ public sealed class InMemoryAdapterFactory : AdapterTestFactoryBase
     {
         services.AddKoanControllersFrom<VisibilityWidgetController>();
         services.AddSingleton<IRequestOptionsHook<VisibilityWidget>, VisibilityHook>();
+        services.AddSingleton<IModelHook<VisibilityWidget>, StoppingModelHook>();
 
         // AN-leak: relationship-expansion visibility surface (Maker [parent] / Work [child] with two
         // divergent edges to the same target). The Work/Maker hooks wall non-public rows so the

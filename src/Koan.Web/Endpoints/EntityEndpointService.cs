@@ -313,6 +313,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         ApplyViewHeader(context, request.Accept);
 
         var emit = await _hookPipeline.EmitCollection(hookContext, payload);
+        if (hookContext.IsShortCircuited) return CollectionShortCircuit(context, hookContext);
         payload = emit.replaced ? emit.payload : payload;
         CopyHookHeaders(context, hookContext);
 
@@ -378,6 +379,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         ApplyViewHeader(context, request.Accept);
 
         var emit = await _hookPipeline.EmitCollection(hookContext, list);
+        if (hookContext.IsShortCircuited) return CollectionShortCircuit(context, hookContext);
         var payload = emit.replaced ? emit.payload : list;
         CopyHookHeaders(context, hookContext);
 
@@ -402,11 +404,13 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         var hookContext = _hookPipeline.CreateContext(context);
 
         var model = Activator.CreateInstance<TEntity>();
-        await _hookPipeline.AfterModelFetch(hookContext, model);
+        if (!await _hookPipeline.AfterModelFetch(hookContext, model))
+            return ModelShortCircuit(context, hookContext);
 
         ApplyViewHeader(context, request.Accept);
 
         var emit = await _hookPipeline.EmitModel(hookContext, model!);
+        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext);
         var payload = emit.replaced ? emit.payload : model;
         CopyHookHeaders(context, hookContext);
 
@@ -439,7 +443,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
         var model = await Data<TEntity, TKey>.Get(request.Id!, context.CancellationToken);
-        await _hookPipeline.AfterModelFetch(hookContext, model);
+        if (!await _hookPipeline.AfterModelFetch(hookContext, model))
+            return ModelShortCircuit(context, hookContext);
         if (model is null || !PassesRequestPredicates(model, context.Options.Predicates))
         {
             // A predicate-filtered row returns the same NotFound as a missing row so existence is not
@@ -479,6 +484,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         ApplyViewHeader(context, request.Accept);
         var emit = await _hookPipeline.EmitModel(hookContext, model);
+        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext);
         var payload = emit.replaced ? emit.payload : model;
         CopyHookHeaders(context, hookContext);
         return new EntityModelResult<TEntity>(context, model, payload);
@@ -549,7 +555,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             }
         }
 
-        await _hookPipeline.BeforeSave(hookContext, request.Model);
+        if (!await _hookPipeline.BeforeSave(hookContext, request.Model))
+            return ModelShortCircuit(context, hookContext);
 
         if (request.DryRun)
         {
@@ -562,14 +569,16 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         }
 
         var saved = await request.Model.Upsert<TEntity, TKey>(context.CancellationToken);
+        await AuditMutation(context, EntityAuthorizeActions.Write, saved.Id?.ToString() ?? "").ConfigureAwait(false);
 
-        await _hookPipeline.AfterSave(hookContext, saved);
+        if (!await _hookPipeline.AfterSave(hookContext, saved))
+            return ModelShortCircuit(context, hookContext);
 
         ApplyViewHeader(context, request.Accept);
         var emit = await _hookPipeline.EmitModel(hookContext, saved);
+        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext);
         var payload = emit.replaced ? emit.payload : saved;
         CopyHookHeaders(context, hookContext);
-        await AuditMutation(context, EntityAuthorizeActions.Write, saved.Id?.ToString() ?? "").ConfigureAwait(false);
         return new EntityModelResult<TEntity>(context, saved, payload);
     }
 
@@ -625,7 +634,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         foreach (var model in list)
         {
-            await _hookPipeline.BeforeSave(hookContext, model);
+            if (!await _hookPipeline.BeforeSave(hookContext, model))
+                return ModelShortCircuit(context, hookContext);
         }
 
         if (request.DryRun)
@@ -640,15 +650,16 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         }
 
         var upserted = await Data<TEntity, TKey>.UpsertMany(list, context.CancellationToken);
+        await AuditMutation(context, EntityAuthorizeActions.Write, "").ConfigureAwait(false);
 
         foreach (var model in list)
         {
-            await _hookPipeline.AfterSave(hookContext, model);
+            if (!await _hookPipeline.AfterSave(hookContext, model))
+                return ModelShortCircuit(context, hookContext);
         }
 
         context.Headers["Koan-Write-Capabilities"] = WriteCapabilitiesHeader(repo);
         CopyHookHeaders(context, hookContext);
-        await AuditMutation(context, EntityAuthorizeActions.Write, "").ConfigureAwait(false);
         return new EntityEndpointResult(context, new { upserted });
     }
 
@@ -676,7 +687,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             return new EntityModelResult<TEntity>(context, null, null, new NotFoundResult());
         }
 
-        await _hookPipeline.BeforeDelete(hookContext, model);
+        if (!await _hookPipeline.BeforeDelete(hookContext, model))
+            return ModelShortCircuit(context, hookContext);
 
         if (WantsDelta(context, request.DryRun))
         {
@@ -698,13 +710,15 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         {
             return new EntityModelResult<TEntity>(context, null, null, new NotFoundResult());
         }
-        await _hookPipeline.AfterDelete(hookContext, model);
+        await AuditMutation(context, EntityAuthorizeActions.Remove, request.Id?.ToString() ?? "").ConfigureAwait(false);
+        if (!await _hookPipeline.AfterDelete(hookContext, model))
+            return ModelShortCircuit(context, hookContext);
 
         ApplyViewHeader(context, request.Accept);
         var emit = await _hookPipeline.EmitModel(hookContext, model);
+        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext);
         var payload = emit.replaced ? emit.payload : model;
         CopyHookHeaders(context, hookContext);
-        await AuditMutation(context, EntityAuthorizeActions.Remove, request.Id?.ToString() ?? "").ConfigureAwait(false);
         return new EntityModelResult<TEntity>(context, model, payload);
     }
 
@@ -850,7 +864,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         var hookContext = _hookPipeline.CreateContext(context);
 
-        await _hookPipeline.BeforePatch(hookContext, request.Id?.ToString() ?? "", request.Patch!);
+        if (!await _hookPipeline.BeforePatch(hookContext, request.Id?.ToString() ?? "", request.Patch!))
+            return ModelShortCircuit(context, hookContext);
 
         using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
         var original = await Data<TEntity, TKey>.Get(request.Id!, context.CancellationToken);
@@ -913,7 +928,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         constrain?.ApplyStamps(working!); // freeze ownership (re-stamp owner to principal) before save
 
-        await _hookPipeline.BeforeSave(hookContext, working!);
+        if (!await _hookPipeline.BeforeSave(hookContext, working!))
+            return ModelShortCircuit(context, hookContext);
 
         if (WantsDelta(context, request.DryRun))
         {
@@ -932,13 +948,15 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         }
 
         var saved = await working!.Upsert<TEntity, TKey>(context.CancellationToken);
-        await _hookPipeline.AfterPatch(hookContext, saved);
+        await AuditMutation(context, EntityAuthorizeActions.Write, request.Id?.ToString() ?? "").ConfigureAwait(false);
+        if (!await _hookPipeline.AfterPatch(hookContext, saved))
+            return ModelShortCircuit(context, hookContext);
 
         ApplyViewHeader(context, request.Accept);
         var emit = await _hookPipeline.EmitModel(hookContext, saved);
+        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext);
         var payload = emit.replaced ? emit.payload : saved;
         CopyHookHeaders(context, hookContext);
-        await AuditMutation(context, EntityAuthorizeActions.Write, request.Id?.ToString() ?? "").ConfigureAwait(false);
         return new EntityModelResult<TEntity>(context, saved, payload);
     }
 

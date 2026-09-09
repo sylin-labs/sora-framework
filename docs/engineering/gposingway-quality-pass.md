@@ -170,3 +170,24 @@ in the existing Web.WellKnown friend suite, then exercise Gposingway's real endp
 
 Web hook characterization failed all six cases before the fix. The corrected runner passes the complete
 10-test Web.WellKnown suite, including replacement propagation and explicit-stop precedence.
+
+## Endpoint hook authority
+
+**Task/application intent:** A read hook can hide stale translated content, and mutation hooks can reject a
+write before storage changes. **Public expression:** Existing IModelHook<T>, ICollectionHook<T> and
+HookContext.ShortCircuit; unchanged Entity controllers and MCP tools. **Guarantee:** Every invoked hook's
+stop result is honored before later enrichment or mutation. A post-write stop changes the response only;
+it does not roll back a completed write, and the mutation audit must still be recorded.
+**Docs/code evidence:** Web's shared endpoint contract owns REST/MCP parity. The app's real endpoint test
+proves AfterModelFetch returns false but GetById ignores it. Source review finds the same discarded result
+at BeforeSave, BeforeDelete, BeforePatch and post-write hooks. Collection fetch already handles it correctly.
+**Reuse/coalescence:** Existing ModelShortCircuit/CollectionShortCircuit helpers and the same endpoint owner;
+no new application workaround or public concept. BeforeSave on a batch validates every row before any write.
+**Verification:** Native endpoint calls in the existing InMemory adapter host prove read/new/expanded read,
+save/batch/patch/delete stops and unchanged persisted state for pre-write rejections, including dry runs.
+**Boundary:** This fixes invoked hooks. Bulk delete has its existing separate access/command contract.
+No production mutation, new service, remote operation, or package version override is introduced.
+
+Endpoint authority characterization failed all 11 pre-operation cases before the fix. The complete
+InMemory Web adapter suite then passed 92 tests. Three additional post-write cases also pass, for
+14 focused hook-authority cases; committed mutations remain recorded when response processing stops.
