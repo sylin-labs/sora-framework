@@ -1,6 +1,6 @@
 {
-  "Sylin.Koan.Data.Abstractions": "1.0.28",
-  "Sylin.Koan.Data.Core": "1.0.47",
-  "Sylin.Koan.Data.Relational.Abstractions": "1.0.27",
-  "$transitive": "E978DD67F91ED633389D1E330BB590A7129A8775050C726C042CD9D24139D4C3"
+  "Sylin.Koan.Data.Abstractions": "1.0.29",
+  "Sylin.Koan.Data.Core": "1.0.48",
+  "Sylin.Koan.Data.Relational.Abstractions": "1.0.28",
+  "$transitive": "79C7DC16784B351A46DE21693C41681E48F01813A0D6CD4E2B8AD7C273CE0773"
 }

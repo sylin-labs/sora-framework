@@ -1,7 +1,7 @@
 {
-  "Sylin.Koan.Core": "1.0.34",
-  "Sylin.Koan.Web.Auth.Abstractions": "1.0.14",
-  "Sylin.Koan.Web": "1.0.34",
-  "Sylin.Koan.Security.Trust": "1.0.14",
-  "$transitive": "D1E146BF1D795ECDD8F9AF86727DD0E66BA3E174AEE5F4C13C348211166C0E29"
+  "Sylin.Koan.Core": "1.0.35",
+  "Sylin.Koan.Web.Auth.Abstractions": "1.0.15",
+  "Sylin.Koan.Web": "1.0.37",
+  "Sylin.Koan.Security.Trust": "1.0.15",
+  "$transitive": "F75BBBC65058C6A7BC293932F08321F017C107B8784C0DA09B057952F3AFC37D"
 }

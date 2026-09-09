@@ -1,9 +1,9 @@
 {
-  "Sylin.Koan.Data.Abstractions": "1.0.28",
-  "Sylin.Koan.Data.Core": "1.0.47",
-  "Sylin.Koan.Data.Vector": "1.0.24",
-  "Sylin.Koan.AI.Contracts": "1.0.18",
-  "Sylin.Koan.AI": "1.0.20",
-  "Sylin.Koan.Core": "1.0.34",
-  "$transitive": "D6B80D571375D290CF8B2C1EE74CD668A5BB005F8EFA96106068E05B4E51C737"
+  "Sylin.Koan.Data.Abstractions": "1.0.29",
+  "Sylin.Koan.Data.Core": "1.0.48",
+  "Sylin.Koan.Data.Vector": "1.0.25",
+  "Sylin.Koan.AI.Contracts": "1.0.19",
+  "Sylin.Koan.AI": "1.0.21",
+  "Sylin.Koan.Core": "1.0.35",
+  "$transitive": "4F46DF8FF2EE8960CC8BC8CA12DB556D20B98C10950B448F576541D64BE74C1C"
 }
