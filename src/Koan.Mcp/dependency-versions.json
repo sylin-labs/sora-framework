@@ -1,8 +1,8 @@
 {
   "Sylin.Koan.Core": "1.0.35",
-  "Sylin.Koan.Data.Core": "1.0.48",
-  "Sylin.Koan.Web": "1.0.37",
-  "Sylin.Koan.Web.Sse": "1.0.21",
-  "Sylin.Koan.Security.Trust": "1.0.15",
-  "$transitive": "B98D9397AD95F2D46516B9D6DBDC180F6DAF230489CA666D95126E4520DDFAB7"
+  "Sylin.Koan.Data.Core": "1.0.49",
+  "Sylin.Koan.Web": "1.0.38",
+  "Sylin.Koan.Web.Sse": "1.0.22",
+  "Sylin.Koan.Security.Trust": "1.0.16",
+  "$transitive": "C2EFBDD081B83D694996EA0E9DF91EDFF6FE2390429C6886EF859D614F366160"
 }
