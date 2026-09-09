@@ -253,3 +253,7 @@ failures or skips. Two intermediate receipts contain only test-metadata proxy mi
 production failures. The subsequent one-pass simplification adds a sixth aggregate-error case;
 all six pass in `web-declaration-discovery-final.trx` with zero warnings, failures or skips. The lead
 parsed both final receipts and the prior-scan baseline. Public consumer startup remains pending.
+
+The discovery correction is published through [release 34406712072](https://github.com/sylin-org/koan-framework/actions/runs/34406712072)
+at `6f5a6576b185a008b29f2aeb47d981dcd28004de`, including Web 1.0.51. The release's package-only
+application boots successfully; that is not the Gposingway privacy or persisted-data receipt.

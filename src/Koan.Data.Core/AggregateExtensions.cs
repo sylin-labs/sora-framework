@@ -18,6 +18,20 @@ public static class AggregateExtensions
     private static IDataService DataService()
         => AppHost.GetRequiredService<IDataService>(DataOperation);
 
+    /// <summary>Insert only if the identity is absent. Conflict returns no existing row.
+    /// Null partition inherits; empty selects the default. An exception does not imply rollback.</summary>
+    public static Task<MutationResult<TEntity, string>> Insert<TEntity>(this TEntity model,
+        string? partition = null, CancellationToken ct = default)
+        where TEntity : class, IEntity<string>
+        => Data<TEntity, string>.Insert(model, partition, ct);
+
+    /// <summary>Key-inferred insertion for Entity receivers with non-string keys.</summary>
+    public static Task<MutationResult<TEntity, TKey>> Insert<TEntity, TKey>(this Model.Entity<TEntity, TKey> model,
+        string? partition = null, CancellationToken ct = default)
+        where TEntity : class, IEntity<TKey>
+        where TKey : notnull
+        => Data<TEntity, TKey>.Insert((TEntity)(object)model, partition, ct);
+
     /// <summary>Replace an existing row only while its stored state matches the guard. False means missing or conflict.
     /// Null partition inherits; empty selects the default. An exception after dispatch does not imply rollback.</summary>
     public static Task<bool> ReplaceIf<TEntity>(this TEntity model, Expression<Func<TEntity, bool>> guard,

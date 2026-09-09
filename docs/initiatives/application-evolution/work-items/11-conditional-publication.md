@@ -100,8 +100,11 @@ ten late lowerings; InMemory should consume the existing InMemoryFilterEvaluator
 
 ## Execution and failure boundaries
 
-1. Validate model, non-default stable identity and complete frozen guard. Capture the submitted key;
-   a lifecycle or payload transform must not retarget it. Do not generate a missing key for replacement.
+1. Validate the model and complete frozen guard, then capture the identity exposed by the entity
+   before asynchronous preparation. Preserve normal Entity key-getter semantics: the auto-key
+   convenience type can allocate its stable GUID on first access. Replacement adds no key-assignment
+   or insertion fallback; a key still default or blank refuses. Lifecycle and payload transforms
+   must not retarget the captured identity.
 2. Enter the requested partition before resolving the repository and capability. Null inherits;
    empty selects default; a named value selects that partition. Hold the selected context through
    awaited dispatch/completion and restore the caller on success, refusal and cancellation. Preserve
@@ -297,3 +300,11 @@ Cache test. It excludes the four separately owned AE-10 discovery-correction fil
 passes. All build/test processes have exited and the build lock is released to the lead. Source and
 documentation are frozen for the normal commit/publication boundary; public-package adoption remains
 unmeasured by this owner.
+
+## Publication receipt
+
+Source commit `77139336c` and the separate Web discovery correction were promoted at
+`6f5a6576b185a008b29f2aeb47d981dcd28004de` after five generated dependency-floor commits and a
+zero-change pass. [Release 34406712072](https://github.com/sylin-org/koan-framework/actions/runs/34406712072)
+succeeded: 87 planned, packed and published packages; package-only verification composed 99 modules
+and booted Sylin.Koan.App. Gposingway's runtime acceptance remains separate from this release proof.

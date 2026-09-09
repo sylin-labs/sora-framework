@@ -20,8 +20,8 @@ with links to the actual deliverable and evidence.
 ## Initiative state
 
 - Overall: active; shared-foundation milestone proved with published Koan dependencies.
-- Active implementation card: [AE-11 conditional publication](work-items/11-conditional-publication.md), 86 focused tests pass with warning-clean adapter/signature compilation; independent review and all eight repository coherence legs pass. Normal publication is the next gate. AE-10 is committed at 7a74225cc; its discovery correction and public-package acceptance remain separately recorded.
-- Next: normal AE-11 publication after accepted owner evidence, review and coherence. Public-package application adoption remains separate.
+- Active implementation card: [AE-12 Entity insertion](work-items/12-entity-insertion.md), 36 focused tests, independent review and all eight coherence legs pass. AE-11 and the AE-10 discovery correction are published through release 34406712072 at `6f5a6576b`; application acceptance remains separate.
+- Next: publish the reviewed AE-12 forwarding and default-partition correction, then qualify the application from public packages. Gposingway owns its runtime acceptance ledger.
 - Independent participants: none recruited; results and productivity measurements unavailable.
 
 ## Work ledger
@@ -36,12 +36,11 @@ with links to the actual deliverable and evidence.
 | [AE-05 Incremental adoption](work-items/05-incremental-adoption.md) | planned | Requires AE-01's bounded feature/foundation |
 | [AE-06 Independent validation](work-items/06-independent-validation.md) | planned | Requires internal findings, a recorded pilot decision, and consenting participants |
 | [AE-07 Scoped insert safety](work-items/07-scoped-insert-safety.md) | in-progress | Atomic insert boundary and native provider proofs accepted locally; constrained bulk creates reject pending native mixed-write guarantees. Public-package consumer validation remains open. |
-| [AE-08 Counterpart query authority](work-items/08-counterpart-query-authority.md) | in-progress | 220 focused checks, independent source acceptance and repository coherence pass. Terminal projection, native authority, proof reductions and native insertion compatibility are verified locally; publication and public-package consumer acceptance remain open. |
-| [AE-09 Build dependency security](work-items/09-build-dependency-security.md) | in-progress | SourceLink pin selects patched Git build tasks; forced audit restore and focused build pass with zero warnings/errors. Normal package publication remains open. |
-
-| [AE-10 Conditional field access](work-items/10-field-access.md) | in-progress | One property Access owner across typed MVC/shared Entity/MCP; 132 focused checks and independent source acceptance. Normal coherence/publication and public-package adoption remain; exact receipts and limits in card. |
-
-| [AE-11 Conditional publication](work-items/11-conditional-publication.md) | in-progress | Normalized Filter primitive and sole Entity ReplaceIf verb implemented; 86 focused tests pass and all 11 adapter implementations compile. Independent review and all eight coherence legs pass; normal publication and public-package acceptance remain. Exact receipts and limits are in the card. |
+| [AE-08 Counterpart query authority](work-items/08-counterpart-query-authority.md) | in-progress | 220 focused checks, independent source acceptance and repository coherence pass. Published through release 34390309739; full public-package application acceptance remains open. |
+| [AE-09 Build dependency security](work-items/09-build-dependency-security.md) | in-progress | SourceLink pin selects patched Git build tasks; forced audit restore and focused build pass with zero warnings/errors. Included in the subsequent public releases; application acceptance remains separate. |
+| [AE-10 Conditional field access](work-items/10-field-access.md) | in-progress | One property Access owner across typed MVC/shared Entity/MCP; 132 focused checks and independent source acceptance. Published through 34400186238; discovery correction published through 34406712072. Public application acceptance remains. |
+| [AE-11 Conditional publication](work-items/11-conditional-publication.md) | in-progress | Normalized Filter primitive and sole Entity ReplaceIf verb; 86 focused tests, independent review and coherence pass. Release 34406712072 published 87 packages; public application acceptance remains. |
+| [AE-12 Entity insertion](work-items/12-entity-insertion.md) | in-progress | Thin Insert forwarding and explicit-default Save consistency; 36 focused cases, independent review and coherence pass. Normal publication and application acceptance remain. |
 
 Use `in-progress`, `blocked`, `done`, or `stopped` as execution proceeds. A blocker names the
 missing input and useful restart point; stopped work retains its findings. Front matter in

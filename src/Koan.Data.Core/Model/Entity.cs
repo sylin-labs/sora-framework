@@ -236,6 +236,12 @@ namespace Koan.Data.Core.Model
             return Data<TEntity, TKey>.Upsert(model, ct);
         }
 
+        /// <summary>Insert only if the identity is absent. Conflict returns no existing row.
+        /// Null partition inherits; empty selects the default. An exception does not imply rollback.</summary>
+        public static Task<MutationResult<TEntity, TKey>> Insert(TEntity model,
+            string? partition = null, CancellationToken ct = default)
+            => Data<TEntity, TKey>.Insert(model, partition, ct);
+
         /// <summary>Replace an existing row only while its stored state matches the guard. False means missing or conflict.</summary>
         public static Task<bool> ReplaceIf(TEntity model, Expression<Func<TEntity, bool>> guard,
             string? partition = null, CancellationToken ct = default)
@@ -252,7 +258,7 @@ namespace Koan.Data.Core.Model
         public static Task<TEntity> Upsert(TEntity model, string partition, CancellationToken ct = default)
         {
             if (model is null) throw new ArgumentNullException(nameof(model));
-            if (string.IsNullOrWhiteSpace(partition)) throw new ArgumentException("Partition must be provided.", nameof(partition));
+            if (partition != string.Empty && string.IsNullOrWhiteSpace(partition)) throw new ArgumentException("Partition must be provided.", nameof(partition));
 
             return Data<TEntity, TKey>.Upsert(model, partition, ct);
         }

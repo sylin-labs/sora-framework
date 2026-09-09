@@ -18,11 +18,11 @@ Read the [charter](README.md) and [live ledger](PROGRESS.md), then
 
 ## Current corrective slice
 
-Resume [AE-11 conditional publication](work-items/11-conditional-publication.md) on the existing
-working tree. Coordinate Core/native/Cache tests and the separate Web discovery correction before
-building. The accepted contract uses one Entity ReplaceIf verb and the existing normalized Filter
-primitive; 86 focused tests and warning-clean adapter/signature builds pass. Independent source review accepted the bounded contract; all eight repository coherence legs pass and normal publication remains. AE-10 is committed at 7a74225cc. Normal
-publication and public-package brownfield acceptance remain distinct from local owner checks.
+Resume [AE-12 Entity insertion](work-items/12-entity-insertion.md) on the existing working tree.
+The thin Insert forwarding and explicit-default Save correction pass 36 focused tests, independent
+review and all eight coherence legs. Follow the normal publication boundary. AE-11 and the Web
+discovery correction are published through release 34406712072 at `6f5a6576b`.
+Public-package brownfield acceptance remains distinct from local owner checks.
 Do not start another ledger or AE-02 while this corrective slice is unsettled.
 ## After the current corrective slice
 

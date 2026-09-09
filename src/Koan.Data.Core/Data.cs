@@ -364,6 +364,19 @@ public static class Data<TEntity, TKey>
     // ------------------------------------------------------------------
     // Writes
     // ------------------------------------------------------------------
+    /// <summary>Insert only if the identity is absent, returning the existing native mutation receipt.
+    /// Null partition inherits; empty selects the default. No replacement or retry.</summary>
+    public static async Task<MutationResult<TEntity, TKey>> Insert(TEntity model,
+        string? partition = null, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        ct.ThrowIfCancellationRequested();
+        using var scope = WithPartition(partition);
+        var insertion = As<IInsertOnlyRepository<TEntity, TKey>>()
+            ?? throw new NotSupportedException($"The selected repository for {typeof(TEntity).Name} cannot guarantee atomic insertion. Select a supporting connector.");
+        return await insertion.Insert(model, ct).ConfigureAwait(false);
+    }
+
     /// <summary>Atomically replace an existing identity whose stored row matches the guard. No insertion or retry.</summary>
     public static Task<bool> ReplaceIf(TEntity model, Expression<Func<TEntity, bool>> guard,
         string? partition = null, CancellationToken ct = default)

@@ -51,6 +51,12 @@ validation:
 
 ## Entity lifecycle ownership
 
+- Entity static and receiver `Insert` forward to `Data<TEntity,TKey>.Insert`. Data validates the
+  model/cancellation, selects the existing partition scope before repository resolution and awaits
+  the existing `IInsertOnlyRepository` terminal inside that scope. Null inherits, empty selects
+  default; source, adapter and isolation continue through the normal facade. There is no second
+  capability or receipt interpreter. Single-entity Entity.Upsert (and its Save alias) accepts empty
+  for default; the other bulk and conditional-change overloads retain their existing contract.
 - The optional insert-only terminal enters the same source guard, operation horizon, write plan,
   managed write scope, and field transforms as Save. It negotiates support before provisioning
   readiness and uses upsert lifecycle with `Prior = null`, without reading a collision. Field transforms
@@ -58,6 +64,15 @@ validation:
 - Deferred coordination cannot supply an immediate atomic insertion receipt and rejects. Cache and
   Entity variants forward insertion through the existing semantic boundary. Generated identifiers
   propagate from detached storage payloads without replacing the plaintext application model.
+- `MutationResult<TEntity,TKey>` remains authoritative: Inserted/Committed returns the application
+  instance/key; proven identity collision is Conflict/NotCommitted with no entity. Native nonidentity
+  constraint failures are not conflicts. Invalid/ambiguous receipts and post-commit completion errors
+  propagate as failures, without rollback or facade retry. Source policy, lifecycle and provider
+  qualification can refuse before native dispatch; BeforeUpsert effects are not transactional.
+- Root and inherited variant statics retain root receipt typing; string-key receiver inference
+  retains the exact variant receipt. Runtime variants continue through the existing write plan and
+  discriminator serialization. No Insert companion methods are generated; existing root identity
+  collision semantics apply across variants.
 
 - `TEntity.Lifecycle` declares persistence behavior inside `AddKoan(() => ...)` or Koan module
   registration. The builder is static syntax; every plan and handler list belongs to one host.

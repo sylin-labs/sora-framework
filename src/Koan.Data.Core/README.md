@@ -28,7 +28,7 @@ dotnet add package Sylin.Koan.Data.Core
 
 Constrained generated endpoints automatically use Data's insert-only terminal when their visible read
 cannot find the submitted identity. The elected adapter must support native atomic insertion; no
-application registration or new Entity verb is required. Existing `Save` remains an upsert. A conflicting
+application registration is required. Existing `Save` remains an upsert. A conflicting
 insert exposes no prior row and runs no completion lifecycle. This does not make authorized updates
 conditional on their earlier read or provide atomic mixed bulk writes.
 
@@ -250,3 +250,30 @@ Use a qualified connector and an ordinary persisted revision field. Unsupported 
 variants and active managed/read scopes refuse. BeforeUpsert may run on conflict; AfterUpsert runs
 only after success. A cancellation, cache error or lifecycle exception after dispatch does not imply
 rollback. This protects one destination row, not equality with another document at commit time.
+
+## Insert without replacement
+
+```csharp
+var result = await candidate.Insert(partition: "", ct: ct);
+// Or: await Work.Insert(candidate, partition: "", ct: ct).
+```
+
+Use ordinary `AddKoan()` with a qualified connector. `Insert` returns the existing
+`MutationResult<TEntity,TKey>`: Inserted/Committed includes the application entity and assigned key;
+Conflict/NotCommitted includes the submitted key and no entity. A conflict leaves the existing row
+unchanged, including a row hidden from an earlier read. BeforeUpsert can run on conflict with no Prior;
+only verified insertion runs AfterUpsert. Data does not retry.
+
+Null partition inherits the current context; empty selects default; a named value selects that
+partition. Ordinary single-entity `Save(partition: "")` also selects default and remains an upsert.
+The caller's scope is restored on completion, refusal or cancellation.
+
+Mongo qualifies acknowledged managed `_id` insertion with an assigned non-default key; SQLite also
+supports its qualified generated-key mapping; InMemory provides host-local atomic insertion.
+Unsupported providers, identity mappings and deferred coordination refuse. Other unique constraints,
+ambiguous commits and completion failures remain exceptions; an exception does not prove rollback.
+Choose recovery according to the business operation, without assuming a failed await means no row.
+
+Family root and inherited variant statics return the root-typed receipt. A string-key variant receiver
+returns its exact typed receipt; a root call still preserves a registered runtime variant and the
+family's shared identity. This does not expand the generated companion's point-Get grammar.
