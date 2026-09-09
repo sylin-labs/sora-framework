@@ -2,8 +2,8 @@
   "Sylin.Koan.Data.Abstractions": "1.0.30",
   "Sylin.Koan.Data.Vector.Abstractions": "1.0.21",
   "Sylin.Koan.Data.Vector": "1.0.28",
-  "Sylin.Koan.Data.Core": "1.0.50",
+  "Sylin.Koan.Data.Core": "1.0.51",
   "Sylin.Koan.Core": "1.0.35",
   "Sylin.Koan.ZenGarden.Contracts": "1.0.12",
-  "$transitive": "175C86AD9FF203E067484C3F86704A0D9CF4C248A42F5AFC8F6FB5C2667EBBDC"
+  "$transitive": "F58E7A451F45ED3CF96D120676C70733B76DAFBC345A4506CCE2B6404DEF7159"
 }
