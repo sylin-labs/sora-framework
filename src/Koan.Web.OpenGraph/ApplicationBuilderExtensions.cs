@@ -1,6 +1,7 @@
 using System.Linq;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Koan.Web.OpenGraph;
@@ -37,6 +38,11 @@ internal static class ApplicationBuilderExtensions
 
     internal static bool ShouldHandle(HttpRequest request)
     {
+        // Controllers own their status, authorization and rendering decisions. They can call
+        // IOpenGraphCardRenderer after checking business visibility.
+        if (request.HttpContext.GetEndpoint()?.Metadata.GetMetadata<ControllerActionDescriptor>() is not null)
+            return false;
+
         if (!HttpMethods.IsGet(request.Method))
         {
             return false;

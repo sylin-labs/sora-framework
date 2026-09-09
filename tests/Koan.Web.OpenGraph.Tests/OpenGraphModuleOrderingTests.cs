@@ -27,7 +27,7 @@ public sealed class OpenGraphModuleOrderingTests
     }
 
     [Fact]
-    public void Module_contributes_social_cards_at_the_early_web_pipeline_boundary()
+    public void Module_contributes_social_cards_after_authorization()
     {
         var services = new ServiceCollection();
         new Koan.Web.OpenGraph.Initialization.OpenGraphModule().Register(services);
@@ -35,6 +35,6 @@ public sealed class OpenGraphModuleOrderingTests
         using var provider = services.BuildServiceProvider();
         var contributor = provider.GetServices<IKoanWebPipelineContributor>().Should().ContainSingle().Subject;
 
-        contributor.Stage.Should().Be(KoanWebPipelineStage.BeforeRouting);
+        contributor.Stage.Should().Be(KoanWebPipelineStage.AfterAuthorization);
     }
 }

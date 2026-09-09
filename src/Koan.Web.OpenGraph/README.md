@@ -55,3 +55,5 @@ original, and `CardImage.Url(...)` preserves an external URL. This package compo
 - No SSR, prerender, headless browser, oEmbed, JSON-LD, sitemap, or routing ownership is provided.
 
 See the [OpenGraph guide](../../docs/guides/opengraph-howto.md) and [technical contract](TECHNICAL.md).
+
+Controller endpoints retain their response and authorization semantics. Automatic shell injection passes them through. Controllers may call `IOpenGraphCardRenderer.RenderShellAsync(Request, ct)` after their business visibility checks; SPA fallback navigation remains automatic.

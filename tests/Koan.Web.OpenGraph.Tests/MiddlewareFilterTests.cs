@@ -20,6 +20,16 @@ public sealed class MiddlewareFilterTests
     }
 
     [Fact]
+    public void Controller_routes_retain_their_own_response()
+    {
+        var request = Request("GET", "/work/hidden", "text/html");
+        request.HttpContext.SetEndpoint(new Endpoint(null,
+            new EndpointMetadataCollection(new Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor()),
+            "Resource controller"));
+        ApplicationBuilderExtensions.ShouldHandle(request).Should().BeFalse();
+    }
+
+    [Fact]
     public void Handles_html_navigation_get()
         => ApplicationBuilderExtensions.ShouldHandle(Request("GET", "/work/abc", "text/html,application/xhtml+xml"))
             .Should().BeTrue();

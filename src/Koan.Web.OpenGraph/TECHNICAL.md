@@ -4,7 +4,7 @@
 
 `OpenGraphModule` binds `Koan:Web:OpenGraph`, creates one `SocialCardRegistry` instance in the application's
 `IServiceCollection`, registers the renderer/shell cache, and contributes `OpenGraphPipelineContributor` at
-`BeforeRouting`. There is no manual activation path.
+`AfterAuthorization`. There is no manual activation path.
 
 `SocialCards.For<T>` requires `KoanCompositionScope`, adds its registration to that host's registry, and registers
 after-upsert/after-remove handlers through the host-owned Entity lifecycle plan. Application resolver/selector closures
@@ -39,3 +39,5 @@ when the shell file's timestamp changes.
 
 No routing/fallback ownership, SSR/prerender, user-agent policy, distributed shell cache, CDN invalidation, oEmbed,
 JSON-LD, sitemap generation, or guarantee that external crawlers honor emitted metadata is claimed.
+
+Controller endpoints retain their response and authorization semantics. Automatic shell injection passes them through. Controllers may call `IOpenGraphCardRenderer.RenderShellAsync(Request, ct)` after their business visibility checks; SPA fallback navigation remains automatic.

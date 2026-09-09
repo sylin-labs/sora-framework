@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Builder;
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -70,6 +71,23 @@ public sealed class OpenGraphCardRendererSpec : IAsyncLifetime
             .Image(w => CardImage.Recipe("share-card", w.CoverMediaId))
             .Url(w => $"/work/{w.Id}")
             .Type("article");
+    }
+
+    [Fact]
+    public async Task Composed_middleware_preserves_controller_not_found()
+    {
+        var app = new Microsoft.AspNetCore.Builder.ApplicationBuilder(_host.Services);
+        app.UseOpenGraphCards();
+        app.Run(context => { context.Response.StatusCode = 404; return Task.CompletedTask; });
+        var request = Navigation("/work/hidden");
+        request.HttpContext.RequestServices = _host.Services;
+        request.HttpContext.Response.Body = new MemoryStream();
+        request.HttpContext.SetEndpoint(new Endpoint(null,
+            new EndpointMetadataCollection(new Microsoft.AspNetCore.Mvc.Controllers.ControllerActionDescriptor()),
+            "Resource controller"));
+        await app.Build()(request.HttpContext);
+        request.HttpContext.Response.StatusCode.Should().Be(404);
+        request.HttpContext.Response.Body.Length.Should().Be(0);
     }
 
     [Fact]
