@@ -372,6 +372,7 @@ public abstract class AodbConformanceSpecsBase<TFixture> : KoanDataSpec<TFixture
     {
         RequireBackingStore();
         await using var host = await BootAsync(RoutedSourceSettings());
+        using var partition = Lease(NewPartition("database"));
         await CapabilityConformanceGate.RunCell(ResolveCaps(host.Services), Modules,
             DataCaps.Isolation.DatabaseScoped,
             realize: async () =>

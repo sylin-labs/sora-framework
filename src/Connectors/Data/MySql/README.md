@@ -51,3 +51,12 @@ For a named source, configure the standard source connection and select it with 
 - Unreachable endpoints, unresolved `auto`, unconfigured named sources, denied DDL/write access, and incompatible schemas fail at the connector boundary.
 
 This connector targets MySQL. MariaDB compatibility is not asserted by this package.
+
+## Enum storage contract
+
+Default Entity storage preserves enum names as strings, including nullable values, nested values, collections,
+and declared EnumMember aliases. Unnamed numeric values fail instead of silently changing the storage format.
+Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
+the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
+An explicit external mapping codec remains responsible for its declared physical representation.
+Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.

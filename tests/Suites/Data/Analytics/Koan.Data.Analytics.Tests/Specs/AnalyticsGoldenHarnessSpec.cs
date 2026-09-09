@@ -15,7 +15,7 @@ public sealed class AnalyticsGoldenHarnessSpec(SqliteFixture fixture)
     [Fact]
     public async Task A_green_harness_reports_no_failures_and_a_wrong_expectation_is_reported()
     {
-        var host = await KoanIntegrationHost.Configure()
+        await using var host = await KoanIntegrationHost.Configure()
             .WithSetting("Koan:Environment", "Test")
             .WithSetting("Koan:Data:Sources:Default:Adapter", "sqlite")
             .WithSetting("Koan:Data:Sources:Default:ConnectionString", fixture.ConnectionString)

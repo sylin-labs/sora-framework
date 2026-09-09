@@ -16,7 +16,7 @@ internal static class MappingValueConversion
         if (effective.IsInstanceOfType(value)) return value;
         if (effective.IsEnum)
         {
-            if (value is string text) return Enum.Parse(effective, text, ignoreCase: false);
+            if (value is string text) return Koan.Data.Abstractions.EnumStorageEncoding.Parse(text, effective);
             return Enum.ToObject(effective, Convert.ChangeType(value, Enum.GetUnderlyingType(effective), CultureInfo.InvariantCulture)!);
         }
         if (effective == typeof(Guid) && value is string guid) return Guid.Parse(guid);

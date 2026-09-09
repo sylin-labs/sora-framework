@@ -105,20 +105,14 @@ public sealed class SqlParameters
     /// <summary>
     /// The value as a provider will accept it.
     ///
-    /// <para>An enum is bound as its underlying number. Providers disagree about enums and one of them refuses
-    /// outright: Npgsql throws "Writing values of '...' is not supported for parameters having no NpgsqlDbType",
-    /// because it reserves enum binding for PostgreSQL enum types it has been told about, while SqlClient and
-    /// MySqlConnector convert silently. Unwrapping here is what the column expects anyway — every relational
-    /// store type map in this repository resolves an enum to <see cref="Enum.GetUnderlyingType"/> — and it makes
-    /// the three providers agree rather than leaving one of them to be discovered by a filter that happens to
-    /// mention an enum.</para>
+    /// <para>Enums bind as the same strings used by Entity storage and mapping. Provider-specific implicit
+    /// enum conversions must not change a domain state into its underlying number.</para>
     /// </summary>
     private static object Bindable(object? value)
     {
         if (value is null) return DBNull.Value;
-        var type = value.GetType();
-        return type.IsEnum
-            ? Convert.ChangeType(value, Enum.GetUnderlyingType(type), System.Globalization.CultureInfo.InvariantCulture)
+        return value is Enum enumeration
+            ? Koan.Data.Abstractions.EnumStorageEncoding.Format(enumeration)
             : value;
     }
 

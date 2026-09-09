@@ -23,6 +23,8 @@ internal sealed class NpgsqlDialect : IRelationalMappingDialect
     {
         var literal = "'{" + string.Join(',', elementSegments.Select(EscapePath)) + "}'";
         var value = Cast($"(koan_element.value #>> {literal})", elementValueType);
+        if ((Nullable.GetUnderlyingType(elementValueType) ?? elementValueType).IsEnum)
+            value = RelationalEnumOrder.Rank(value, elementValueType);
         // A document may hold no array at that path at all, and jsonb_array_elements refuses a scalar, so the
         // type is checked rather than assumed. An absent or empty array yields NULL, which sorts first —
         // the same place the in-memory sorter puts a widget with no sightings.
@@ -51,7 +53,7 @@ internal sealed class NpgsqlDialect : IRelationalMappingDialect
     private static string Cast(string expression, Type type)
     {
         var effective = Nullable.GetUnderlyingType(type) ?? type;
-        if (effective.IsEnum) effective = Enum.GetUnderlyingType(effective);
+        if (effective.IsEnum) effective = typeof(string);
         if (effective == typeof(bool)) return $"({expression})::boolean";
         if (effective == typeof(byte) || effective == typeof(sbyte) || effective == typeof(short) ||
             effective == typeof(ushort) || effective == typeof(int) || effective == typeof(uint) ||

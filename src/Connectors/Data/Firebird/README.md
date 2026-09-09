@@ -79,3 +79,12 @@ The container fixture in the test project wires all of this; it is the working r
 - No `TRUNCATE` on this engine — `RemoveStrategy.Fast` is a plain `DELETE FROM`.
 - Schema validation reports column presence and primary-key membership; it does not compare column
   definitions (a store type a CLR type cannot see is not faked), matching the SQLite/DuckDB posture.
+
+## Enum storage contract
+
+Default Entity storage preserves enum names as strings, including nullable values, nested values, collections,
+and declared EnumMember aliases. Unnamed numeric values fail instead of silently changing the storage format.
+Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
+the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
+An explicit external mapping codec remains responsible for its declared physical representation.
+Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.

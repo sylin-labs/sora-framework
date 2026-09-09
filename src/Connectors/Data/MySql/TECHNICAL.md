@@ -40,3 +40,12 @@ Bulk upsert and batch operations share one MySQL transaction. Bulk delete uses o
 Registered SQL record/scalar operations require a configured read lane and begin a read-only transaction. The inspector lists, resolves, describes, and samples tables/views within the routed database through `information_schema` and the shared neutral reader. Health opens the resolved source and executes `SELECT 1`.
 
 Capability declarations cover native LINQ/filter execution, provider-bounded paging, bulk writes/deletes, atomic batches, fast removal, conditional replace, and row/container/database isolation. No vector capability or MariaDB-specific dialect branch is present.
+
+## Enum storage contract
+
+Default Entity storage preserves enum names as strings, including nullable values, nested values, collections,
+and declared EnumMember aliases. Unnamed numeric values fail instead of silently changing the storage format.
+Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
+the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
+An explicit external mapping codec remains responsible for its declared physical representation.
+Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.

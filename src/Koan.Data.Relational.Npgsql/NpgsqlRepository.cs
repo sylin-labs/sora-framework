@@ -515,7 +515,7 @@ public sealed class NpgsqlRepository<TEntity, TKey> :
                     MappingPath.Of(item.Path.Members.Select(static member => member.Name).ToArray()),
                     MappingConsumer.Order);
                 var binding = use.Bindings.Single();
-                clauses.Add($"{_plan.Dialect.Read(binding.PhysicalPath, binding.Shape, binding.PhysicalType)} {(item.Desc ? "DESC" : "ASC")}");
+                clauses.Add($"{RelationalEnumOrder.Read(_plan.Dialect, binding)} {(item.Desc ? "DESC" : "ASC")}");
                 handled.Add(item);
             }
             catch (MappingValueException) { }
@@ -590,6 +590,9 @@ public sealed class NpgsqlRepository<TEntity, TKey> :
         {
             var builder = new NpgsqlConnectionStringBuilder(_options.ConnectionString);
             var database = builder.Database;
+            if (string.IsNullOrWhiteSpace(database))
+                throw new InvalidOperationException(
+                    "PostgreSQL reported a missing database, but no database name is configured. Set Database in the source connection string before automatic provisioning.", error);
             builder.Database = "postgres";
             await using var maintenance = new NpgsqlConnection(builder.ConnectionString);
             await maintenance.OpenAsync(ct).ConfigureAwait(false);

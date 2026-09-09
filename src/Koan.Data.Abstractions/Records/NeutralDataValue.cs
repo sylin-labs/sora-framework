@@ -11,7 +11,7 @@ internal static class NeutralDataValue
             float or double or decimal or string or Guid or DateOnly or TimeOnly or DateTime or
             DateTimeOffset or TimeSpan or DataObject or DataArray => value,
         byte[] bytes => bytes.ToArray(),
-        Enum enumeration => NormalizeEnum(enumeration),
+        Enum enumeration => EnumStorageEncoding.Format(enumeration),
         _ => throw new NeutralDataValueException(value.GetType())
     };
 
@@ -30,7 +30,7 @@ internal static class NeutralDataValue
         {
             if (effective.IsEnum)
             {
-                if (value is string name) return Enum.Parse(effective, name, ignoreCase: false);
+                if (value is string name) return EnumStorageEncoding.Parse(name, effective);
                 if (IsInteger(value.GetType())) return Enum.ToObject(effective, value);
             }
             if (effective == typeof(Guid) && value is string guid) return Guid.Parse(guid);
@@ -46,12 +46,6 @@ internal static class NeutralDataValue
             field,
             targetType,
             $"Neutral value type '{value.GetType().FullName}' is not convertible.");
-    }
-
-    private static object NormalizeEnum(Enum value)
-    {
-        var type = Enum.GetUnderlyingType(value.GetType());
-        return Convert.ChangeType(value, type, CultureInfo.InvariantCulture);
     }
 
     private static bool IsInteger(Type type) =>

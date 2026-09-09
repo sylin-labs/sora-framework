@@ -46,6 +46,7 @@ public static class ComparableScalarEncoding
         TimeSpan ts => ts.Ticks,
         DateOnly d => Format(d),
         TimeOnly t => Format(t),
+        Enum enumeration => Koan.Data.Abstractions.EnumStorageEncoding.Format(enumeration),
         _ => value,
     };
 

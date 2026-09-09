@@ -14,18 +14,12 @@ internal static class KoanBackgroundServicesBootstrap
 {
     public static void Register(IServiceCollection services)
     {
-        // Register core background service infrastructure
-        services.Configure<KoanBackgroundServiceOptions>(options =>
-        {
-            // Set defaults
-            options.Enabled = true;
-            options.StartupTimeoutSeconds = 120;
-            options.FailFastOnStartupFailure = true;
-        });
+        services.AddOptions<KoanBackgroundServiceOptions>()
+            .BindConfiguration(KoanBackgroundServiceOptions.SectionName);
 
         // Register the orchestrator as both a singleton and hosted service
         services.AddSingleton<KoanBackgroundServiceOrchestrator>();
-        services.AddHostedService<KoanBackgroundServiceOrchestrator>();
+        services.AddHostedService(provider => provider.GetRequiredService<KoanBackgroundServiceOrchestrator>());
 
         // Register service registry
         services.TryAddSingleton<IServiceRegistry, ServiceRegistry>();

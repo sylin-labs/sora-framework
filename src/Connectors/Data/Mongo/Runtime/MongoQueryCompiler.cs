@@ -75,6 +75,26 @@ internal sealed class MongoQueryCompiler<TEntity, TKey>(MongoEntityPlan<TEntity,
         BsonValue Value(object? value) => entity.FilterValue(logicalPath, resolved, value);
         BsonArray Values() => new(set.Select(Value));
 
+        if (entity.UsesEnumNames(logicalPath, resolved) && filter.Operator is
+            FilterOperator.Gt or FilterOperator.Gte or FilterOperator.Lt or FilterOperator.Lte)
+        {
+            if (scalar is null) return new BsonDocument("$expr", false);
+            var operation = filter.Operator switch
+            {
+                FilterOperator.Gt => "$gt", FilterOperator.Gte => "$gte",
+                FilterOperator.Lt => "$lt", _ => "$lte"
+            };
+            var rank = MongoEntityPlan<TEntity, TKey>.EnumOrderExpression("$" + path, resolved.ComparableType);
+            var value = FilterValueConverter.Convert(scalar, resolved.ComparableType);
+            _ = EnumStorageEncoding.Format((Enum)value!);
+            return new BsonDocument("$expr", new BsonDocument("$and", new BsonArray
+            {
+                new BsonDocument("$ne", new BsonArray { rank, BsonNull.Value }),
+                new BsonDocument(operation, new BsonArray { rank,
+                    new BsonDecimal128(Convert.ToDecimal(value, CultureInfo.InvariantCulture)) })
+            }));
+        }
+
         return filter.Operator switch
         {
             FilterOperator.Eq => new BsonDocument(path, Value(scalar)),
@@ -157,6 +177,12 @@ internal sealed class MongoQueryCompiler<TEntity, TKey>(MongoEntityPlan<TEntity,
                 var path = FieldPath.Of(sort.Path.Members.Select(static member => member.Name).ToArray());
                 var resolved = FieldPathResolver.Resolve(typeof(TEntity), path);
                 name = entity.Field(path, resolved, MappingConsumer.Order);
+                if (entity.UsesEnumNames(path, resolved, MappingConsumer.Order))
+                {
+                    var expression = MongoEntityPlan<TEntity, TKey>.EnumOrderExpression("$" + name, resolved.ComparableType);
+                    name = ComputedOrderField + handled.Count.ToString(CultureInfo.InvariantCulture);
+                    added[name] = expression;
+                }
             }
 
             parts.Add(sort.Desc

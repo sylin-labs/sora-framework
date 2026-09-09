@@ -589,7 +589,7 @@ internal sealed class FirebirdRepository<TEntity, TKey> :
                 var binding = use.Bindings.Single();
                 // The framework's sorter puts NULL first ascending and last descending; the placement is
                 // spelled out because this store must not be trusted to share the assumption.
-                clauses.Add($"{plan.Dialect.Read(binding.PhysicalPath, binding.Shape, binding.PhysicalType)} " +
+                clauses.Add($"{RelationalEnumOrder.Read(plan.Dialect, binding)} " +
                             (item.Desc ? "DESC NULLS LAST" : "ASC NULLS FIRST"));
                 handled.Add(item);
             }

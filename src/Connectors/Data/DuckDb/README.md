@@ -39,8 +39,8 @@ routed tenant**, which is the supported shared-nothing posture.
 
 ## Analytics on the store you already have
 
-DuckDB's SQLite extension is built into the engine, so the adapter can `ATTACH` the application's
-existing SQLite database and aggregate over it without ingestion:
+Declare the `sqlite_scanner` extension to attach an existing SQLite database and aggregate over it.
+Pre-install the extension, or explicitly enable `AutoInstallExtensions` to install declared extensions before LOAD:
 
 ```csharp
 // via raw instruction on any DuckDB-routed source
@@ -101,3 +101,12 @@ builder.Services.AddKoan(koan =>
 ## Limits
 
 Configuration decides participation; unsupported requests reject before provider work with a named capability and a correction. Provider-specific limits live in the package's TECHNICAL.md.
+
+## Enum storage contract
+
+Default Entity storage preserves enum names as strings, including nullable values, nested values, collections,
+and declared EnumMember aliases. Unnamed numeric values fail instead of silently changing the storage format.
+Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
+the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
+An explicit external mapping codec remains responsible for its declared physical representation.
+Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.

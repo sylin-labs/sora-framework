@@ -207,8 +207,20 @@ internal sealed class CouchbaseDocumentPlan<TEntity, TKey>
 
         var collection = CouchbasePath.Quote(path.Members.Take(boundary).Select(static member => Camel(member.Name)));
         var leaf = CouchbasePath.Quote(path.Members.Skip(boundary).Select(static member => Camel(member.Name)));
-        return $"{function}(ARRAY {OrderElement}.{leaf} FOR {OrderElement} IN doc.{collection} END)";
+        var value = $"{OrderElement}.{leaf}";
+        if ((Nullable.GetUnderlyingType(path.ValueType) ?? path.ValueType).IsEnum)
+            value = EnumOrderValue(value, path.ValueType);
+        return $"{function}(ARRAY {value} FOR {OrderElement} IN doc.{collection} END)";
     }
+
+    internal bool UsesEnumNames(FieldPath path, ResolvedField resolved, MappingConsumer consumer)
+        => (Nullable.GetUnderlyingType(resolved.ComparableType) ?? resolved.ComparableType).IsEnum
+            && (_mapping is null || _mapping.Use(MappingPath.Of((resolved.CanonicalPath ?? path).Segments.ToArray()), consumer)
+                .Bindings.Single().Descriptor.Codec is null);
+
+    internal static string EnumOrderValue(string value, Type enumType)
+        => $"(CASE {value} {string.Join(" ", EnumStorageEncoding.OrderedValues(enumType).Select(pair =>
+            $"WHEN {JsonConvert.SerializeObject(pair.Key)} THEN {pair.Value.ToString(CultureInfo.InvariantCulture)}"))} ELSE NULL END)";
 
     /// <summary>Binding name for the array comprehension; prefixed so it cannot collide with a document field.</summary>
     private const string OrderElement = "koan_order_element";
@@ -226,8 +238,6 @@ internal sealed class CouchbaseDocumentPlan<TEntity, TKey>
     internal object? FilterValue(FieldPath path, ResolvedField resolved, object? value)
     {
         var converted = FilterValueConverter.Convert(value, resolved.ComparableType);
-        if (converted is Enum enumeration)
-            converted = Convert.ChangeType(enumeration, Enum.GetUnderlyingType(enumeration.GetType()), CultureInfo.InvariantCulture);
         if (_mapping is not null)
         {
             var logical = resolved.CanonicalPath ?? path;

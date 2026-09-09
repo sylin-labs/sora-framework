@@ -23,6 +23,8 @@ internal sealed class SqlServerDialect : IRelationalMappingDialect
         Type elementValueType)
     {
         var value = Cast($"JSON_VALUE(koan_element.[value], '{JsonPath(elementSegments)}')", elementValueType);
+        if ((Nullable.GetUnderlyingType(elementValueType) ?? elementValueType).IsEnum)
+            value = RelationalEnumOrder.Rank(value, elementValueType);
         // JSON_QUERY already returns NULL for anything that is not an object or array, so an absent path
         // becomes an empty array rather than an error. No rows means NULL, which sorts first.
         var aggregate = $"(SELECT {(max ? "MAX" : "MIN")}({value}) FROM OPENJSON(ISNULL({arraySql}, N'[]')) AS koan_element)";
@@ -52,7 +54,7 @@ internal sealed class SqlServerDialect : IRelationalMappingDialect
     private static string Cast(string expression, Type type)
     {
         var value = Nullable.GetUnderlyingType(type) ?? type;
-        if (value.IsEnum) value = Enum.GetUnderlyingType(value);
+        if (value.IsEnum) value = typeof(string);
         if (value == typeof(bool)) return $"TRY_CONVERT(bit, {expression})";
         if (value == typeof(byte) || value == typeof(sbyte) || value == typeof(short) || value == typeof(ushort) ||
             value == typeof(int) || value == typeof(uint) || value == typeof(long) || value == typeof(ulong) ||

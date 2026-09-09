@@ -39,6 +39,7 @@ public sealed class MappingBindingPlan
     public object? Encode(object? logical)
     {
         if (Descriptor.Codec is { } codec) return codec.Encode(logical);
+        if (logical is Enum enumeration) return EnumStorageEncoding.Format(enumeration);
         return Shape == MappingValueShape.Object ? _structured!.Project(logical) : logical;
     }
 

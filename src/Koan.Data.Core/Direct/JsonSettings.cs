@@ -12,6 +12,6 @@ internal static class JsonSettings
         DateParseHandling = DateParseHandling.DateTimeOffset,
         FloatParseHandling = FloatParseHandling.Decimal,
         Culture = System.Globalization.CultureInfo.InvariantCulture,
-        Converters = { new StringEnumConverter() }
+        Converters = { new StringEnumConverter { AllowIntegerValues = false } }
     };
 }

@@ -1,4 +1,4 @@
-﻿---
+---
 uid: reference.modules.Koan.data.core
 title: Koan.Data.Core - Technical Reference
 description: Contracts, options, design and operations for the Koan data core.
@@ -337,3 +337,15 @@ validation:
 - ADR ARCH-0084 - unified capability model: `/docs/decisions/ARCH-0084-unified-capability-model.md`
 - Engineering guardrails: `/docs/engineering/README.md`
 
+## Enum storage contract
+
+Default Entity storage preserves enum names as strings, including nullable values, nested values, collections,
+and declared EnumMember aliases. Unnamed numeric values fail instead of silently changing the storage format.
+Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
+the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
+An explicit external mapping codec remains responsible for its declared physical representation.
+Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+
+Entity JSON hydration replaces constructor-seeded members with stored collections. Additive domain collections
+with public parameterless constructors and Add(T) round-trip as arrays; a nonempty constructor also needs public
+Clear() so hydration cannot duplicate its defaults. Unsupported shapes fail with a corrective error.

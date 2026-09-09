@@ -736,7 +736,7 @@ internal sealed class DuckDbRepository<TEntity, TKey> :
                     MappingConsumer.Order).Bindings.Single();
                 // The framework's sorter puts NULL first ascending and last descending; DuckDB's default is
                 // the reverse, so every ordered term states its placement.
-                clauses.Add($"{plan.Dialect.Read(binding.PhysicalPath, binding.Shape, binding.PhysicalType)} " +
+                clauses.Add($"{RelationalEnumOrder.Read(plan.Dialect, binding)} " +
                             (item.Desc ? "DESC NULLS LAST" : "ASC NULLS FIRST"));
                 handled.Add(item);
             }
@@ -835,12 +835,10 @@ internal sealed class DuckDbRepository<TEntity, TKey> :
     }
 
     /// <summary>
-    /// DuckDB binds strictly by CLR shape. Enums travel as their underlying number (what the JSON document
-    /// stores and what the SQLite sibling's dynamic typing made invisible), and BLOBs are already streams —
-    /// everything else passes through.
+    /// DuckDB binds strictly by CLR shape. Enum parameters use the same names as stored documents.
     /// </summary>
     private static object? NormalizeValue(object? value) => value is Enum enumValue
-        ? Convert.ChangeType(enumValue, Enum.GetUnderlyingType(enumValue.GetType()), System.Globalization.CultureInfo.InvariantCulture)
+        ? EnumStorageEncoding.Format(enumValue)
         : value;
 
     private static void BindObject(DuckDBCommand command, object? values)
@@ -1148,7 +1146,7 @@ internal sealed class DuckDbRepository<TEntity, TKey> :
             var type = Nullable.GetUnderlyingType(binding.PhysicalType) ?? binding.PhysicalType;
             return type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort) ||
                    type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong) ||
-                   type == typeof(float) || type == typeof(double) || type == typeof(decimal) || type.IsEnum;
+                   type == typeof(float) || type == typeof(double) || type == typeof(decimal);
         }
         catch { return false; }
     }

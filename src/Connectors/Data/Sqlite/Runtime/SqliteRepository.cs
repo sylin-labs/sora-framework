@@ -710,7 +710,7 @@ internal sealed class SqliteRepository<TEntity, TKey> :
                 var binding = plan.Mapping.Use(
                     MappingPath.Of(item.Path.Members.Select(static member => member.Name).ToArray()),
                     MappingConsumer.Order).Bindings.Single();
-                clauses.Add($"{plan.Dialect.Read(binding.PhysicalPath, binding.Shape, binding.PhysicalType)} " +
+                clauses.Add($"{RelationalEnumOrder.Read(plan.Dialect, binding)} " +
                             (item.Desc ? "DESC" : "ASC"));
                 handled.Add(item);
             }
@@ -1109,7 +1109,7 @@ internal sealed class SqliteRepository<TEntity, TKey> :
             var type = Nullable.GetUnderlyingType(binding.PhysicalType) ?? binding.PhysicalType;
             return type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort) ||
                    type == typeof(int) || type == typeof(uint) || type == typeof(long) || type == typeof(ulong) ||
-                   type == typeof(float) || type == typeof(double) || type == typeof(decimal) || type.IsEnum;
+                   type == typeof(float) || type == typeof(double) || type == typeof(decimal);
         }
         catch { return false; }
     }

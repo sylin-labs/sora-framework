@@ -78,10 +78,7 @@ internal static class MongoValues
         TimeOnly timeOnly => new BsonString(timeOnly.ToString("HH:mm:ss.fffffff", CultureInfo.InvariantCulture)),
         TimeSpan timeSpan => new BsonInt64(timeSpan.Ticks),
         byte[] bytes => new BsonBinaryData(bytes),
-        Enum enumeration => FromNeutral(Convert.ChangeType(
-            enumeration,
-            Enum.GetUnderlyingType(enumeration.GetType()),
-            CultureInfo.InvariantCulture)),
+        Enum enumeration => new BsonString(EnumStorageEncoding.Format(enumeration)),
         IEnumerable<object?> values => new BsonArray(values.Select(FromNeutral)),
         System.Collections.IEnumerable values => new BsonArray(values.Cast<object?>().Select(FromNeutral)),
         _ => BsonValue.Create(value)

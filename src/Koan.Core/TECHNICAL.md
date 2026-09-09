@@ -127,3 +127,10 @@ source: src/Koan.Core/
 - ARCH-0111: `/docs/decisions/ARCH-0111-unified-runtime-facts.md`
 - ARCH-0113: `/docs/decisions/ARCH-0113-entity-capability-communication.md`
 - ARCH-0114: `/docs/decisions/ARCH-0114-layered-capability-activation.md`
+
+## Background-service configuration
+
+AddKoan binds Koan:BackgroundServices to KoanBackgroundServiceOptions. Enabled=false prevents the
+orchestrator from executing child services; Services:<service-name>:Enabled controls an individual child.
+StartupTimeoutSeconds and FailFastOnStartupFailure use the same bound options. The directly resolved
+orchestrator and the hosted-service instance are the same singleton. Previously ignored settings now take effect.

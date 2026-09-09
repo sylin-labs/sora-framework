@@ -23,11 +23,10 @@ public sealed class HealthProbeSchedulerOwnershipSpec
         services.Where(descriptor => descriptor.ServiceType == typeof(IHostedService)
                                      && descriptor.ImplementationType == typeof(HealthProbeScheduler))
             .Should().BeEmpty("the Koan background-service orchestrator owns scheduler execution");
-        services.Where(descriptor => descriptor.ServiceType == typeof(IHostedService)
-                                     && descriptor.ImplementationType == typeof(KoanBackgroundServiceOrchestrator))
-            .Should().ContainSingle();
-
         using var provider = services.BuildServiceProvider();
+        provider.GetServices<IHostedService>().OfType<KoanBackgroundServiceOrchestrator>()
+            .Should().ContainSingle().Which.Should()
+            .BeSameAs(provider.GetRequiredService<KoanBackgroundServiceOrchestrator>());
         var scheduler = provider.GetRequiredService<HealthProbeScheduler>();
         provider.GetServices<IKoanBackgroundService>()
             .Where(service => service is HealthProbeScheduler)

@@ -34,7 +34,7 @@ internal sealed class DuckDbDialect : IRelationalMappingDialect
         // (a collection path handed back for array aggregation) must stay JSON, because json_each walks it.
         return shape == MappingValueShape.Object
             ? $"({root} -> '{pathText}')"
-            : IsNumeric(type) || type == typeof(TimeSpan) || type.IsEnum
+            : IsNumeric(type) || type == typeof(TimeSpan)
                 ? $"CAST({root} -> '{pathText}' AS DOUBLE)"
                 : type == typeof(bool)
                     ? $"CAST({root} -> '{pathText}' AS BOOLEAN)"
@@ -51,11 +51,12 @@ internal sealed class DuckDbDialect : IRelationalMappingDialect
         var pathText = JsonPath(elementSegments);
         var type = Nullable.GetUnderlyingType(elementValueType) ?? elementValueType;
         var extracted = $"json_extract(koan_element.value, '{pathText}')";
-        var value = IsNumeric(type) || type == typeof(TimeSpan) || type.IsEnum
+        var value = IsNumeric(type) || type == typeof(TimeSpan)
             ? $"CAST({extracted} AS DOUBLE)"
             : type == typeof(bool)
                 ? $"CAST({extracted} AS BOOLEAN)"
                 : $"json_extract_string(koan_element.value, '{pathText}')";
+        if (type.IsEnum) value = RelationalEnumOrder.Rank(value, type);
         // json_each rejects a scalar, and a document may hold no array at that path at all, so the type is
         // checked rather than assumed. No rows means NULL, which the framework's sorter puts first on an
         // ascending read — DuckDB's default is the opposite, so the placement is spelled out.

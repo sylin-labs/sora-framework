@@ -111,7 +111,7 @@ internal sealed class StructuredValuePlan
     {
         if (value is null) return null;
         var effective = Nullable.GetUnderlyingType(declaredType) ?? declaredType;
-        if (effective.IsEnum) return Convert.ChangeType(value, Enum.GetUnderlyingType(effective), System.Globalization.CultureInfo.InvariantCulture);
+        if (value is Enum enumeration) return EnumStorageEncoding.Format(enumeration);
         if (IsScalar(effective)) return value is byte[] bytes ? bytes.ToArray() : value;
         if (TryElementType(effective) is { } element && value is IEnumerable sequence)
         {

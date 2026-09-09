@@ -20,7 +20,7 @@ public static class FilterValueConverter
 
         if (raw is string s)
         {
-            if (target.IsEnum) return Enum.Parse(target, s, ignoreCase: true);
+            if (target.IsEnum) return EnumStorageEncoding.Parse(s, target);
             if (target == typeof(Guid)) return Guid.Parse(s);
             if (target == typeof(DateTime)) return DateTime.Parse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
             if (target == typeof(DateTimeOffset)) return DateTimeOffset.Parse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);

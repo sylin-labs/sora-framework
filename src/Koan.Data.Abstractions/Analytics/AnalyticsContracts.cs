@@ -418,7 +418,7 @@ public static class AnalyticsParameterBinder
     public static Expression<Func<TEntity, bool>> Bind<TEntity>(
         Expression<Func<TEntity, bool>> where,
         IReadOnlyList<AnalyticsParameterDeclaration> declarations,
-        IReadOnlyDictionary<string, object?> values,
+        IReadOnlyDictionary<string, object?>? values,
         out string? corrective)
         where TEntity : class
     {

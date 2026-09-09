@@ -18,6 +18,42 @@ namespace Koan.Data.Relational.Tests;
 public sealed class MappingConformanceSpec
 {
     [Fact]
+    public void Enum_mapping_declares_string_columns_and_round_trips_names_inside_objects()
+    {
+        using var provider = Host(source => source.Map<EnumDocument>(map => map
+            .Container("ENUM_DOCUMENT")
+            .Key(item => item.Id).Name("ID")
+            .Property(item => item.State).Name("STATE")
+            .Property(item => item.Details).Object("DETAILS")));
+        var plan = provider.GetRequiredService<IDataMappingPlans>().Require<EnumDocument>("Legacy");
+        var source = new EnumDocument { Id = 7, State = EnumState.Ready,
+            Details = new EnumDetails { State = EnumState.Closed, States = [EnumState.Ready, EnumState.Closed] } };
+        var record = plan.Write(source);
+        record.Values.Single(value => value.Path.Name == "STATE").Value.Should().Be("ready-for-use");
+        var state = plan.Bindings.Single(binding => binding.LogicalPath.Equals(MappingPath.Of("State")));
+        state.PhysicalType.Should().Be(typeof(string));
+        state.Descriptor.PhysicalType.Should().Be(typeof(string));
+        var json = new RelationalStructuredValueCodec().Serialize(record.Values.Single(value => value.Path.Name == "DETAILS").Value);
+        json.Should().Contain("\"State\":\"Closed\"").And.Contain("\"States\":[\"ready-for-use\",\"Closed\"]");
+        var restored = plan.Hydrate<EnumDocument>(record.Values);
+        restored.State.Should().Be(EnumState.Ready);
+        restored.Details.States.Should().Equal(EnumState.Ready, EnumState.Closed);
+    }
+
+    public enum EnumState { [System.Runtime.Serialization.EnumMember(Value = "ready-for-use")] Ready = 1, Closed = 2 }
+    public sealed class EnumDetails
+    {
+        public EnumState State { get; set; }
+        public EnumState[] States { get; set; } = [];
+    }
+    public sealed class EnumDocument
+    {
+        public long Id { get; set; }
+        public EnumState State { get; set; }
+        public EnumDetails Details { get; set; } = new();
+    }
+
+    [Fact]
     public void Compact_hybrid_map_round_trips_and_preserves_missing_complex_values()
     {
         using var provider = Host(source => source.Map<Customer>(map => map

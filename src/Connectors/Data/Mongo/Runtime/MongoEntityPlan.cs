@@ -210,7 +210,9 @@ internal sealed class MongoEntityPlan<TEntity, TKey>
         {
             ["input"] = new BsonDocument("$ifNull", new BsonArray { "$" + array, new BsonArray() }),
             ["as"] = "koanElement",
-            ["in"] = "$$koanElement." + leaf
+            ["in"] = (Nullable.GetUnderlyingType(path.ValueType) ?? path.ValueType).IsEnum
+                ? EnumOrderExpression("$$koanElement." + leaf, path.ValueType)
+                : new BsonString("$$koanElement." + leaf)
         }));
     }
 
@@ -237,6 +239,22 @@ internal sealed class MongoEntityPlan<TEntity, TKey>
         }
         return MongoValues.FromNeutral(converted);
     }
+
+    public bool UsesEnumNames(FieldPath path, ResolvedField resolved, MappingConsumer consumer = MappingConsumer.Filter)
+        => (Nullable.GetUnderlyingType(resolved.ComparableType) ?? resolved.ComparableType).IsEnum
+            && (_mapping is null || _mapping.Use(MappingPath.Of(path.Segments.ToArray()), consumer)
+                .Bindings.Single().Descriptor.Codec is null);
+
+    public static BsonDocument EnumOrderExpression(string value, Type enumType)
+        => new("$switch", new BsonDocument
+        {
+            ["branches"] = new BsonArray(EnumStorageEncoding.OrderedValues(enumType).Select(pair => new BsonDocument
+            {
+                ["case"] = new BsonDocument("$eq", new BsonArray { value, new BsonDocument("$literal", pair.Key) }),
+                ["then"] = new BsonDecimal128(pair.Value)
+            })),
+            ["default"] = BsonNull.Value
+        });
 
     private static FilterDefinition<BsonDocument> Identity(MappedRecord record)
     {

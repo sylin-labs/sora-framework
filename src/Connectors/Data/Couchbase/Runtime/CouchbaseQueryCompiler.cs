@@ -64,6 +64,15 @@ internal sealed class CouchbaseQueryCompiler<TEntity, TKey>(CouchbaseDocumentPla
             FilterValue.None => [],
             _ => throw new NotSupportedException("Couchbase received an unknown filter value shape.")
         };
+        if (entity.UsesEnumNames(filter.Field, resolved, MappingConsumer.Filter) && filter.Operator is
+            FilterOperator.Gt or FilterOperator.Gte or FilterOperator.Lt or FilterOperator.Lte)
+        {
+            if (values[0] is null) return "FALSE";
+            path = CouchbaseDocumentPlan<TEntity, TKey>.EnumOrderValue(path, resolved.ComparableType);
+            var enumeration = EnumStorageEncoding.Parse((string)values[0]!,
+                Nullable.GetUnderlyingType(resolved.ComparableType) ?? resolved.ComparableType);
+            values[0] = Convert.ToDecimal(enumeration, System.Globalization.CultureInfo.InvariantCulture);
+        }
         return filter.Operator switch
         {
             FilterOperator.Eq when values[0] is null => $"{path} IS NULL",
@@ -124,6 +133,8 @@ internal sealed class CouchbaseQueryCompiler<TEntity, TKey>(CouchbaseDocumentPla
                 var path = FieldPath.Of(sort.Path.Members.Select(static member => member.Name).ToArray());
                 var resolved = FieldPathResolver.Resolve(typeof(TEntity), path);
                 value = "doc." + entity.Field(path, resolved, MappingConsumer.Order);
+                if (entity.UsesEnumNames(path, resolved, MappingConsumer.Order))
+                    value = CouchbaseDocumentPlan<TEntity, TKey>.EnumOrderValue(value, resolved.ComparableType);
             }
 
             values.Add(value + (sort.Desc ? " DESC" : " ASC"));

@@ -1,4 +1,4 @@
-﻿---
+---
 uid: reference.modules.Koan.data.sqlserver
 title: Koan.Data.Connector.SqlServer - Technical Reference
 description: SQL Server adapter for Koan data.
@@ -84,3 +84,11 @@ fallback. The connector does not currently expose provider-specific retry or com
 - [DATA-0107 provider-bounded Entity streams](../../../../docs/decisions/DATA-0107-provider-bounded-entity-streams.md)
 - [Entity access and streaming](../../../../docs/guides/data/entity-access-and-streaming.md)
 
+## Enum storage contract
+
+Default Entity storage preserves enum names as strings, including nullable values, nested values, collections,
+and declared EnumMember aliases. Unnamed numeric values fail instead of silently changing the storage format.
+Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
+the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
+An explicit external mapping codec remains responsible for its declared physical representation.
+Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.

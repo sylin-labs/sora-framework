@@ -39,7 +39,7 @@ public static class TypeClassification
     public static bool IsPortableStreamSortScalar(Type t)
     {
         if (t is null) return false;
-        if (t.IsEnum) return true;
+        if (t.IsEnum) return !t.IsDefined(typeof(FlagsAttribute), inherit: false);
         return t == typeof(bool) ||
                t == typeof(byte) ||
                t == typeof(sbyte) ||

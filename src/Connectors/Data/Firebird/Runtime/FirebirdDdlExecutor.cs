@@ -259,7 +259,7 @@ internal sealed class FirebirdDdlExecutor : IRelationalDdlExecutor
     private static bool IsInteger(Type type)
     {
         var value = Nullable.GetUnderlyingType(type) ?? type;
-        if (value.IsEnum) value = Enum.GetUnderlyingType(value);
+        if (value.IsEnum) value = typeof(string);
         return value == typeof(byte) || value == typeof(sbyte) || value == typeof(short) || value == typeof(ushort) ||
                value == typeof(int) || value == typeof(uint) || value == typeof(long) || value == typeof(ulong);
     }
@@ -268,7 +268,7 @@ internal sealed class FirebirdDdlExecutor : IRelationalDdlExecutor
     {
         if (structured) return "BLOB SUB_TYPE TEXT";
         var type = Nullable.GetUnderlyingType(clrType) ?? clrType;
-        if (type.IsEnum) type = Enum.GetUnderlyingType(type);
+        if (type.IsEnum) type = typeof(string);
         if (type == typeof(bool)) return "BOOLEAN";
         if (type == typeof(byte) || type == typeof(sbyte) || type == typeof(short) || type == typeof(ushort)) return "SMALLINT";
         if (type == typeof(int) || type == typeof(uint)) return "INTEGER";

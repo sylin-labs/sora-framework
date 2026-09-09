@@ -55,6 +55,17 @@ internal sealed class DuckDbOptionsSetup(IConfiguration configuration) : IConfig
             "Koan:Data:DuckDb:Extensions",
             "Koan:Data:DuckDb:Engine:Extensions");
         if (extensions is { Count: > 0 }) options.Extensions = extensions;
+        options.ExtensionDirectory = First(Constants.Configuration.Keys.ExtensionDirectory,
+            Constants.Configuration.Keys.EngineExtensionDirectory) ?? options.ExtensionDirectory;
+        var autoInstall = First(Constants.Configuration.Keys.AutoInstallExtensions,
+            Constants.Configuration.Keys.EngineAutoInstallExtensions);
+        if (autoInstall is not null)
+        {
+            if (!bool.TryParse(autoInstall, out var enabled))
+                throw new OptionsValidationException(nameof(DuckDbOptions), typeof(DuckDbOptions),
+                    [$"{Constants.Configuration.Keys.AutoInstallExtensions} must be true or false."]);
+            options.AutoInstallExtensions = enabled;
+        }
     }
 
     /// <summary>A list option binds either from a comma-separated scalar or from indexed children.</summary>

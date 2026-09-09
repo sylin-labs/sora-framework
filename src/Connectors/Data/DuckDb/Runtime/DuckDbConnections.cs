@@ -61,7 +61,7 @@ internal sealed class DuckDbConnections : IDisposable, IAsyncDisposable
                     "The DuckDB database does not exist yet and the caller declined creation.", normalized);
             var extensions = _settings.Value.Extensions;
             if (extensions is { Count: > 0 })
-                return new ExtensionLoadingConnection(normalized, [.. extensions]);
+                return new ExtensionLoadingConnection(normalized, [.. extensions], _settings.Value.AutoInstallExtensions);
             return Validated(normalized);
         }
     }
@@ -284,10 +284,12 @@ internal sealed class DuckDbConnections : IDisposable, IAsyncDisposable
     private sealed class ExtensionLoadingConnection : DuckDBConnection
     {
         private readonly string[] _extensions;
+        private readonly bool _autoInstall;
 
-        public ExtensionLoadingConnection(string connectionString, string[] extensions) : base(connectionString)
+        public ExtensionLoadingConnection(string connectionString, string[] extensions, bool autoInstall) : base(connectionString)
         {
             _extensions = extensions;
+            _autoInstall = autoInstall;
             foreach (var extension in _extensions)
                 if (string.IsNullOrWhiteSpace(extension) || !extension.All(c => char.IsLetterOrDigit(c) || c == '_'))
                     throw new InvalidOperationException(
@@ -313,8 +315,16 @@ internal sealed class DuckDbConnections : IDisposable, IAsyncDisposable
             foreach (var extension in _extensions)
             {
                 using var command = CreateCommand();
-                command.CommandText = $"LOAD {extension}";
-                try { command.ExecuteNonQuery(); }
+                try
+                {
+                    if (_autoInstall)
+                    {
+                        command.CommandText = $"INSTALL {extension}";
+                        command.ExecuteNonQuery();
+                    }
+                    command.CommandText = $"LOAD {extension}";
+                    command.ExecuteNonQuery();
+                }
                 catch (Exception error)
                 {
                     throw new InvalidOperationException(

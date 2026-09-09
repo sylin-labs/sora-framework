@@ -551,7 +551,7 @@ internal sealed class MySqlRepository<TEntity, TKey> :
                     MappingPath.Of(item.Path.Members.Select(static member => member.Name).ToArray()),
                     MappingConsumer.Order);
                 var binding = use.Bindings.Single();
-                clauses.Add($"{plan.Dialect.Read(binding.PhysicalPath, binding.Shape, binding.PhysicalType)} " +
+                clauses.Add($"{RelationalEnumOrder.Read(plan.Dialect, binding)} " +
                             (item.Desc ? "DESC" : "ASC"));
                 handled.Add(item);
             }

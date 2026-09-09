@@ -15,25 +15,34 @@ namespace Koan.Data.Analytics.Tests.Specs;
 /// materialization store is per-host DuckDB, rebuilt from the record store — derived state, never a
 /// second system of record.
 /// </summary>
-public sealed class AnalyticsProjectionSpec(SqliteFixture fixture)
+public sealed class AnalyticsProjectionSpec(SqliteFixture fixture) : IAsyncDisposable
 {
-    private async Task<IServiceProvider> BootAsync(string tag, string analyticsSettings = "")
+    private IntegrationHost? _host;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_host is not null) await _host.DisposeAsync();
+    }
+
+    private async Task<IServiceProvider> BootAsync(string tag)
     {
         var materialization = Path.Combine(Path.GetTempPath(), $"koan-mat-{tag}.duckdb");
         if (File.Exists(materialization)) File.Delete(materialization);
 
-        var host = await KoanIntegrationHost.Configure()
+        var host = KoanIntegrationHost.Configure()
             .WithSetting("Koan:Environment", "Test")
             .WithSetting("Koan:Data:Sources:Default:Adapter", "sqlite")
             .WithSetting("Koan:Data:Sources:Default:ConnectionString", fixture.ConnectionString)
             .WithSetting("Koan:Data:Analytics:MaterializationConnectionString", $"Data Source={materialization}")
             .ConfigureServices(services => services.AddKoan())
-            .StartAsync();
+            .Build();
+        _host = host;
         AppHost.Current = host.Services;
 
         await new AnalyticsProbe { Name = $"{tag}-alpha", Priority = 1, Score = 10m }.Save();
         await new AnalyticsProbe { Name = $"{tag}-alpha", Priority = 2, Score = 30m }.Save();
         await new AnalyticsProbe { Name = $"{tag}-beta", Priority = 3, Score = 70m }.Save();
+        await host.StartAsync();
         return host.Services;
     }
 
@@ -112,8 +121,11 @@ public sealed class AnalyticsProjectionSpec(SqliteFixture fixture)
         });
         var services = await BootAsync(tag);
 
-        // The hosted loop's catch-up-on-boot refreshes due projections; give it its first tick.
-        await Task.Delay(1500);
+        // Observe the startup refresh instead of assuming a scheduler timing window.
+        var sink = services.GetRequiredService<IAnalyticsProjectionSink>();
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        while (await sink.ReadStateAsync($"proj-{tag}-by-name", timeout.Token) is null)
+            await Task.Delay(25, timeout.Token);
 
         var answer = await Analytics.Of<AnalyticsProbe, string>().Run($"proj-{tag}-by-name", ct: CancellationToken.None);
         answer.ServedFrom.Should().Be("materialization", "a fresh materialization within tolerance is served");

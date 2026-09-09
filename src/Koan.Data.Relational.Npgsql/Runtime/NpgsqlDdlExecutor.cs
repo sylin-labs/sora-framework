@@ -108,7 +108,7 @@ internal sealed class NpgsqlDdlExecutor(NpgsqlConnection connection, NpgsqlDiale
     {
         if (column.Shape == RelationalStorageShape.Structured) return "jsonb";
         var value = Nullable.GetUnderlyingType(column.ClrType) ?? column.ClrType;
-        if (value.IsEnum) value = Enum.GetUnderlyingType(value);
+        if (value.IsEnum) value = typeof(string);
         if (value == typeof(short) || value == typeof(byte) || value == typeof(sbyte)) return "smallint";
         if (value == typeof(int) || value == typeof(ushort)) return "integer";
         if (value == typeof(long) || value == typeof(uint)) return "bigint";

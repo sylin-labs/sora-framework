@@ -69,3 +69,10 @@ must never be interpreted as implicit success.
 
 See [TECHNICAL.md](https://github.com/sylin-org/koan-framework/blob/main/src/Koan.Core/TECHNICAL.md) for lifecycle,
 context, facts, provider-catalog, and build-target contracts.
+
+## Background-service configuration
+
+AddKoan binds Koan:BackgroundServices to KoanBackgroundServiceOptions. Enabled=false prevents the
+orchestrator from executing child services; Services:<service-name>:Enabled controls an individual child.
+StartupTimeoutSeconds and FailFastOnStartupFailure use the same bound options. The directly resolved
+orchestrator and the hosted-service instance are the same singleton. Previously ignored settings now take effect.

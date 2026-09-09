@@ -38,7 +38,7 @@ public sealed class AnalyticsControllerSpec(SqliteFixture fixture)
         Analytics.Question<AnalyticsProbe, string>($"ctl-{tag}-by-name",
             q => q.Where(p => p.Name.StartsWith(tag)).By(p => p.Name).Count());
 
-        var host = await KoanIntegrationHost.Configure()
+        await using var host = await KoanIntegrationHost.Configure()
             .WithSetting("Koan:Environment", "Test")
             .WithSetting("Koan:Data:Sources:Default:Adapter", "sqlite")
             .WithSetting("Koan:Data:Sources:Default:ConnectionString", fixture.ConnectionString)
@@ -70,7 +70,7 @@ public sealed class AnalyticsControllerSpec(SqliteFixture fixture)
         Analytics.Question<AnalyticsProbe, string>($"ctl-{tag}-by-name",
             q => q.Where(p => p.Name.StartsWith(tag)).By(p => p.Name).Count());
 
-        var host = await KoanIntegrationHost.Configure()
+        await using var host = await KoanIntegrationHost.Configure()
             .WithSetting("Koan:Environment", "Test")
             .WithSetting("Koan:Data:Sources:Default:Adapter", "sqlite")
             .WithSetting("Koan:Data:Sources:Default:ConnectionString", fixture.ConnectionString)
@@ -92,7 +92,7 @@ public sealed class AnalyticsControllerSpec(SqliteFixture fixture)
     [Fact]
     public async Task An_unknown_recipe_is_refused_with_this_entitys_recipes_and_recorded()
     {
-        var host = await KoanIntegrationHost.Configure()
+        await using var host = await KoanIntegrationHost.Configure()
             .WithSetting("Koan:Environment", "Test")
             .WithSetting("Koan:Data:Sources:Default:Adapter", "sqlite")
             .WithSetting("Koan:Data:Sources:Default:ConnectionString", fixture.ConnectionString)
@@ -120,7 +120,7 @@ public sealed class AnalyticsControllerSpec(SqliteFixture fixture)
                   .Materialize(r => r.Every(TimeSpan.FromHours(6)).ServeWithin(TimeSpan.FromHours(6))));
 
         var materialization = Path.Combine(Path.GetTempPath(), $"koan-ctl-mat-{Guid.CreateVersion7():N}.duckdb");
-        var host = await KoanIntegrationHost.Configure()
+        await using var host = await KoanIntegrationHost.Configure()
             .WithSetting("Koan:Environment", "Test")
             .WithSetting("Koan:Data:Sources:Default:Adapter", "sqlite")
             .WithSetting("Koan:Data:Sources:Default:ConnectionString", fixture.ConnectionString)

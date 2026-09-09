@@ -146,7 +146,7 @@ internal sealed class SqlServerDdlExecutor(SqlConnection connection, SqlServerDi
     {
         if (column.Shape == RelationalStorageShape.Structured) return "nvarchar(max)";
         var value = Nullable.GetUnderlyingType(column.ClrType) ?? column.ClrType;
-        if (value.IsEnum) value = Enum.GetUnderlyingType(value);
+        if (value.IsEnum) value = typeof(string);
         if (value == typeof(bool)) return "bit";
         if (value == typeof(byte) || value == typeof(sbyte) || value == typeof(short)) return "smallint";
         if (value == typeof(int) || value == typeof(ushort)) return "int";
@@ -167,7 +167,7 @@ internal sealed class SqlServerDdlExecutor(SqlConnection connection, SqlServerDi
     private static bool IsNumeric(Type type)
     {
         var value = Nullable.GetUnderlyingType(type) ?? type;
-        if (value.IsEnum) value = Enum.GetUnderlyingType(value);
+        if (value.IsEnum) value = typeof(string);
         return value == typeof(byte) || value == typeof(sbyte) || value == typeof(short) || value == typeof(ushort) ||
                value == typeof(int) || value == typeof(uint) || value == typeof(long) || value == typeof(ulong);
     }

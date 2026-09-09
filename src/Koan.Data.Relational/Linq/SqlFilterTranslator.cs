@@ -211,6 +211,11 @@ public sealed class SqlFilterTranslator
         // Comparisons with null are false (locked semantics); SQL 3-valued logic already drops NULL rows
         // from a positive predicate, so emit an always-false clause for a null operand.
         if (raw is null) return "1=0";
+        if (raw is Enum enumeration && mapped?.Descriptor.Codec is null)
+        {
+            _ = EnumStorageEncoding.Format(enumeration);
+            return $"({RelationalEnumOrder.Rank(column, enumeration.GetType())} {op} {AddParam(Convert.ToDecimal(enumeration, CultureInfo.InvariantCulture))})";
+        }
         return $"({column} {op} {AddParam(raw, mapped)})";
     }
 

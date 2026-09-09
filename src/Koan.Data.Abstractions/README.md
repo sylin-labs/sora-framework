@@ -91,3 +91,12 @@ MCP, or another projection must normalize its protocol into that operation befor
 
 See [TECHNICAL.md](https://github.com/sylin-org/koan-framework/blob/main/src/Koan.Data.Abstractions/TECHNICAL.md)
 for query ownership, capability semantics, and adapter compatibility rules.
+
+## Enum storage contract
+
+Default Entity storage preserves enum names as strings, including nullable values, nested values, collections,
+and declared EnumMember aliases. Unnamed numeric values fail instead of silently changing the storage format.
+Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
+the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
+An explicit external mapping codec remains responsible for its declared physical representation.
+Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.

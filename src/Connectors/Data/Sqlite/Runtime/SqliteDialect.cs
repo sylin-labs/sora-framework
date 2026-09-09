@@ -41,6 +41,7 @@ internal sealed class SqliteDialect : IRelationalMappingDialect
         var value = IsNumeric(type) || type == typeof(bool) || type == typeof(TimeSpan)
             ? $"CAST({extracted} AS NUMERIC)"
             : extracted;
+        if (type.IsEnum) value = RelationalEnumOrder.Rank(value, type);
         // json_each rejects a scalar, and a document may hold no array at that path at all, so the type is
         // checked rather than assumed. No rows means NULL, which sorts first — where the in-memory sorter
         // puts a widget with no sightings.

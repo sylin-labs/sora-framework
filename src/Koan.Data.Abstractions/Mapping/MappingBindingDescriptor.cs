@@ -41,5 +41,6 @@ public sealed record MappingBindingDescriptor
     public MappingGeneration Generation { get; }
     public MappingAuthority Authority { get; }
     public IDataMappingCodec? Codec { get; }
-    public Type PhysicalType => Codec?.PhysicalType ?? LogicalType;
+    public Type PhysicalType => Codec?.PhysicalType ??
+        ((Nullable.GetUnderlyingType(LogicalType) ?? LogicalType).IsEnum ? typeof(string) : LogicalType);
 }

@@ -12,8 +12,15 @@ namespace Koan.Data.Analytics.Tests.Specs;
 /// of slices. Missing values refuse with the required names; extra values are coverage signals, not
 /// errors. Undeclared parameters are refused, never silently ignored.
 /// </summary>
-public sealed class AnalyticsParameterSpec(SqliteFixture fixture)
+public sealed class AnalyticsParameterSpec(SqliteFixture fixture) : IAsyncDisposable
 {
+    private IntegrationHost? _host;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_host is not null) await _host.DisposeAsync();
+    }
+
     private const string QuestionName = "param-spec-high-or-above";
 
     private async Task<IServiceProvider> BootAndSeedAsync(string? namePrefix = null)
@@ -24,6 +31,7 @@ public sealed class AnalyticsParameterSpec(SqliteFixture fixture)
             .WithSetting("Koan:Data:Sources:Default:ConnectionString", fixture.ConnectionString)
             .ConfigureServices(services => services.AddKoan())
             .StartAsync();
+        _host = host;
         AppHost.Current = host.Services;
         string Name(int index) => namePrefix is null ? $"p{index}" : $"{namePrefix}-p{index}";
         await new AnalyticsProbe { Name = Name(1), Priority = 1, Score = 10m }.Save();

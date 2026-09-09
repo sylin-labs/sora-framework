@@ -279,7 +279,7 @@ internal sealed class MySqlDdlExecutor(MySqlConnection connection, MySqlDialect 
     {
         if (column.Shape == RelationalStorageShape.Structured) return "json";
         var value = Nullable.GetUnderlyingType(column.ClrType) ?? column.ClrType;
-        if (value.IsEnum) value = Enum.GetUnderlyingType(value);
+        if (value.IsEnum) value = typeof(string);
         if (value == typeof(bool)) return "boolean";
         if (value == typeof(byte)) return "tinyint unsigned";
         if (value == typeof(sbyte)) return "tinyint";
@@ -305,7 +305,7 @@ internal sealed class MySqlDdlExecutor(MySqlConnection connection, MySqlDialect 
     private static bool IsInteger(Type type)
     {
         var value = Nullable.GetUnderlyingType(type) ?? type;
-        if (value.IsEnum) value = Enum.GetUnderlyingType(value);
+        if (value.IsEnum) value = typeof(string);
         return value == typeof(byte) || value == typeof(sbyte) || value == typeof(short) || value == typeof(ushort) ||
                value == typeof(int) || value == typeof(uint) || value == typeof(long) || value == typeof(ulong);
     }

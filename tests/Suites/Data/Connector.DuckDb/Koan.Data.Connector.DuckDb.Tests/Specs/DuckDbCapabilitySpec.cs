@@ -14,6 +14,20 @@ namespace Koan.Data.Connector.DuckDb.Tests.Specs;
 /// </summary>
 public sealed class DuckDbCapabilitySpec
 {
+    [Theory]
+    [InlineData("")]
+    [InlineData("Engine:")]
+    public async Task Declared_extension_options_bind_even_with_a_warm_extension_cache(string prefix)
+    {
+        await using var host = await Boot(Path.Combine(TempDir("options"), "main.duckdb"))
+            .WithSetting($"Koan:Data:DuckDb:{prefix}AutoInstallExtensions", "true")
+            .WithSetting($"Koan:Data:DuckDb:{prefix}ExtensionDirectory", ".koan/test-extensions")
+            .StartAsync();
+        var options = host.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<DuckDbOptions>>().Value;
+        options.AutoInstallExtensions.Should().BeTrue();
+        options.ExtensionDirectory.Should().Be(".koan/test-extensions");
+    }
+
     private static string TempDir(string label) =>
         Path.Combine(Path.GetTempPath(), $"koan-duckdb-cap-{label}-{Guid.CreateVersion7():n}");
 

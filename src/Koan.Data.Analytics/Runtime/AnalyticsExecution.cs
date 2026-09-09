@@ -237,7 +237,7 @@ internal static class AnalyticsExecution
         var fresh = state?.LastRefreshUtc is { } last &&
                     (tolerance is null || DateTimeOffset.UtcNow - last <= tolerance);
 
-        if (fresh)
+        if (fresh && state is not null)
         {
             var served = await sink.ReadRowsAsync(question.Name, ceiling + 1, 0, null, token).ConfigureAwait(false);
             var capped = served.Count > ceiling;

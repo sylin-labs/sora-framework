@@ -18,8 +18,15 @@ namespace Koan.Data.Analytics.Tests.Specs;
 /// freshness negotiation (maxAge + materialization-derived caching headers). All four expose facts
 /// the surface already owns; the specs pin that they invent none.
 /// </summary>
-public sealed class AnalyticsDelightDoorsSpec(SqliteFixture fixture)
+public sealed class AnalyticsDelightDoorsSpec(SqliteFixture fixture) : IAsyncDisposable
 {
+    private IntegrationHost? _host;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_host is not null) await _host.DisposeAsync();
+    }
+
     private async Task<IServiceProvider> BootSeededAsync(string tag)
     {
         var materialization = Path.Combine(Path.GetTempPath(), $"koan-mat-{tag}.duckdb");
@@ -32,6 +39,7 @@ public sealed class AnalyticsDelightDoorsSpec(SqliteFixture fixture)
             .WithSetting("Koan:Data:Analytics:MaterializationConnectionString", $"Data Source={materialization}")
             .ConfigureServices(services => services.AddKoan())
             .StartAsync();
+        _host = host;
         AppHost.Current = host.Services;
         await new AnalyticsProbe { Name = $"{tag}-alpha", Priority = 1, Score = 10m }.Save();
         await new AnalyticsProbe { Name = $"{tag}-beta", Priority = 3, Score = 70m }.Save();

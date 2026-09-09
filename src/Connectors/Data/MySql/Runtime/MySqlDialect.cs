@@ -24,6 +24,8 @@ internal sealed class MySqlDialect : IRelationalMappingDialect
         var value = Cast(
             Unquote($"JSON_EXTRACT(koan_element.koan_value, '{JsonPath(elementSegments)}')"),
             elementValueType);
+        if ((Nullable.GetUnderlyingType(elementValueType) ?? elementValueType).IsEnum)
+            value = RelationalEnumOrder.Rank(value, elementValueType);
         // JSON_TABLE refuses anything but an array, and a document may hold no array at that path at all, so
         // the type is checked rather than assumed. No rows means NULL, which sorts first — where the
         // in-memory sorter puts a widget with no sightings.
@@ -76,7 +78,7 @@ internal sealed class MySqlDialect : IRelationalMappingDialect
     internal static string Cast(string expression, Type type)
     {
         var value = Nullable.GetUnderlyingType(type) ?? type;
-        if (value.IsEnum) value = Enum.GetUnderlyingType(value);
+        if (value.IsEnum) value = typeof(string);
         if (value == typeof(bool))
             return $"CASE LOWER({expression}) WHEN 'true' THEN 1 WHEN 'false' THEN 0 ELSE CAST({expression} AS UNSIGNED) END";
         if (value == typeof(byte) || value == typeof(ushort) ||

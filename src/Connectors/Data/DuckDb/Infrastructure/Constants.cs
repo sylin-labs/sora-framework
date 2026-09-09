@@ -25,6 +25,10 @@ public static class Constants
         public static class Keys
         {
             public const string ConnectionString = Section + ":ConnectionString";
+            public const string AutoInstallExtensions = Section + ":AutoInstallExtensions";
+            public const string EngineAutoInstallExtensions = Section + ":Engine:AutoInstallExtensions";
+            public const string ExtensionDirectory = Section + ":ExtensionDirectory";
+            public const string EngineExtensionDirectory = Section + ":Engine:ExtensionDirectory";
             public const string DefaultSourceConnectionString = "Koan:Data:Sources:Default:ConnectionString";
             public const string ProviderSourceConnectionString = DefaultSourceSection + ":ConnectionString";
             public const string ConnectionStringsDuckDb = "ConnectionStrings:DuckDb";

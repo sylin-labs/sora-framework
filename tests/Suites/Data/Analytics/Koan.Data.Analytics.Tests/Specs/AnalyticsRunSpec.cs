@@ -12,8 +12,15 @@ namespace Koan.Data.Analytics.Tests.Specs;
 /// provenance (question, engine, age, cap). Seeds are tagged per test because the assembly shares one
 /// store — analytics must stay correct on a store that is not exclusively its own.
 /// </summary>
-public sealed class AnalyticsRunSpec(SqliteFixture fixture)
+public sealed class AnalyticsRunSpec(SqliteFixture fixture) : IAsyncDisposable
 {
+    private IntegrationHost? _host;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_host is not null) await _host.DisposeAsync();
+    }
+
     private async Task<IServiceProvider> BootAndSeedAsync(string tag, (string Name, int Priority, decimal Score)[] seeds)
     {
         var host = await KoanIntegrationHost.Configure()
@@ -22,6 +29,7 @@ public sealed class AnalyticsRunSpec(SqliteFixture fixture)
             .WithSetting("Koan:Data:Sources:Default:ConnectionString", fixture.ConnectionString)
             .ConfigureServices(services => services.AddKoan())
             .StartAsync();
+        _host = host;
         AppHost.Current = host.Services;
         foreach (var seed in seeds)
             await new AnalyticsProbe { Name = $"{tag}-{seed.Name}", Priority = seed.Priority, Score = seed.Score }.Save();

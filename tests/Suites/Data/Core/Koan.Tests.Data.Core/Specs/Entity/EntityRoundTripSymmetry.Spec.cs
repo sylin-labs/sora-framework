@@ -18,6 +18,102 @@ namespace Koan.Tests.Data.Core.Specs.Entity;
 /// </summary>
 public sealed class EntityRoundTripSymmetrySpec
 {
+    [Fact]
+    public void A_seeded_additive_collection_replaces_its_constructor_values()
+    {
+        var source = new SeededBucketOwner { Id = "seeded-owner" };
+        source.Values.Add("saved");
+        var json = EntityJsonSerialization.SerializeDocument(source);
+        var restored = (SeededBucketOwner)EntityJsonSerialization.DeserializeDocument(json, typeof(SeededBucketOwner));
+        restored.Values.Should().Equal("seed", "saved");
+    }
+
+    private sealed class SeededBucketOwner : Entity<SeededBucketOwner>
+    {
+        public SeededBucket Values { get; set; } = new();
+    }
+    public sealed class SeededBucket : IEnumerable<string>
+    {
+        private readonly List<string> _values = ["seed"];
+        public void Add(string value) => _values.Add(value);
+        public void Clear() => _values.Clear();
+        public IEnumerator<string> GetEnumerator() => _values.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    [Fact]
+    public void Enum_names_are_strings_in_documents_and_query_comparands()
+    {
+        var source = new EnumOwner
+        {
+            Id = "enum-owner", State = State.Published, Optional = State.Suppressed,
+            States = [State.Published, State.Suppressed], Permissions = Permission.Read | Permission.Write,
+            Alias = AliasState.Ready
+        };
+        var json = EntityJsonSerialization.SerializeDocument(source);
+        var document = JObject.Parse(json);
+        document["state"]!.Value<string>().Should().Be("Published");
+        document["state"]!.Type.Should().Be(JTokenType.String);
+        document["optional"]!.Value<string>().Should().Be("Suppressed");
+        document["states"]!.Values<string>().Should().Equal("Published", "Suppressed");
+        document["permissions"]!.Value<string>().Should().Be("Read, Write");
+        document["alias"]!.Value<string>().Should().Be("ready-for-use");
+        Koan.Data.Core.ComparableScalarEncoding.EncodeComparand(State.Published).Should().Be("Published");
+        Koan.Data.Core.ComparableScalarEncoding.EncodeComparand(AliasState.Ready).Should().Be("ready-for-use");
+        var restored = (EnumOwner)EntityJsonSerialization.DeserializeDocument(json, typeof(EnumOwner));
+        restored.State.Should().Be(source.State);
+        restored.Optional.Should().Be(source.Optional);
+        restored.States.Should().Equal(source.States);
+        restored.Permissions.Should().Be(source.Permissions);
+        restored.Alias.Should().Be(source.Alias);
+    }
+
+    [Fact]
+    public void Unnamed_enum_values_cannot_silently_be_written_as_numbers()
+    {
+        var save = () => EntityJsonSerialization.SerializeDocument(new EnumOwner { State = (State)1234 });
+        save.Should().Throw<JsonSerializationException>();
+        var compare = () => Koan.Data.Core.ComparableScalarEncoding.EncodeComparand((State)1234);
+        compare.Should().Throw<JsonSerializationException>();
+    }
+
+    private enum State { Draft, Published, Suppressed }
+    [Flags] private enum Permission { None = 0, Read = 1, Write = 2 }
+    private enum AliasState { [System.Runtime.Serialization.EnumMember(Value = "ready-for-use")] Ready }
+    private sealed class EnumOwner : Entity<EnumOwner>
+    {
+        public State State { get; set; }
+        public State? Optional { get; set; }
+        public State[] States { get; set; } = [];
+        public Permission Permissions { get; set; }
+        public AliasState Alias { get; set; }
+    }
+
+    [Fact]
+    public void Additive_domain_collection_round_trips_inside_a_dictionary()
+    {
+        var source = new BucketOwner { Id = "bucket-owner" };
+        source.Buckets["game"] = new Bucket();
+        source.Buckets["game"].Add("example");
+        var json = EntityJsonSerialization.SerializeDocument(source);
+        var restored = (BucketOwner)EntityJsonSerialization.DeserializeDocument(json, typeof(BucketOwner));
+        restored.Buckets["game"].Should().Equal("example");
+        JObject.Parse(json)["buckets"]!["game"].Should().BeOfType<JArray>();
+    }
+
+    private sealed class BucketOwner : Entity<BucketOwner>
+    {
+        public Dictionary<string, Bucket> Buckets { get; set; } = new();
+    }
+
+    public sealed class Bucket : IEnumerable<string>
+    {
+        private readonly List<string> _values = new();
+        public void Add(string value) => _values.Add(value);
+        public IEnumerator<string> GetEnumerator() => _values.GetEnumerator();
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
     private sealed class Guarded : Entity<Guarded>
     {
         public string Label { get; set; } = "";

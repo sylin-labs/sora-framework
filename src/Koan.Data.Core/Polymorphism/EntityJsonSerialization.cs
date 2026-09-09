@@ -23,6 +23,12 @@ public static class EntityJsonSerialization
     {
         ArgumentNullException.ThrowIfNull(settings);
 
+        // Stored collections replace constructor defaults; appending them duplicates state on every reload.
+        settings.ObjectCreationHandling = ObjectCreationHandling.Replace;
+
+        if (!settings.Converters.Any(static converter => converter is Newtonsoft.Json.Converters.StringEnumConverter))
+            settings.Converters.Add(new Newtonsoft.Json.Converters.StringEnumConverter { AllowIntegerValues = false });
+
         if (settings.ContractResolver is not EntityJsonContractResolver)
         {
             var naming = (settings.ContractResolver as DefaultContractResolver)?.NamingStrategy;

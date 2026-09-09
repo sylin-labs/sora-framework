@@ -15,8 +15,15 @@ namespace Koan.Data.Analytics.Tests.Specs;
 /// names which ran. The delta door hands back the cursor for the next poll: consumers never
 /// construct watermarks, the server keeps no per-consumer state.
 /// </summary>
-public sealed class AnalyticsFacetDeltaSpec(SqliteFixture fixture)
+public sealed class AnalyticsFacetDeltaSpec(SqliteFixture fixture) : IAsyncDisposable
 {
+    private IntegrationHost? _host;
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_host is not null) await _host.DisposeAsync();
+    }
+
     private async Task<IServiceProvider> BootAsync(string tag)
     {
         var materialization = Path.Combine(Path.GetTempPath(), $"koan-mat-{tag}.duckdb");
@@ -29,6 +36,7 @@ public sealed class AnalyticsFacetDeltaSpec(SqliteFixture fixture)
             .WithSetting("Koan:Data:Analytics:MaterializationConnectionString", $"Data Source={materialization}")
             .ConfigureServices(services => services.AddKoan())
             .StartAsync();
+        _host = host;
         AppHost.Current = host.Services;
         return host.Services;
     }

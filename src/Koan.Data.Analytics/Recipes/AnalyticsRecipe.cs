@@ -3,7 +3,6 @@ using Koan.Data.Abstractions;
 using Koan.Data.Abstractions.Analytics;
 using Koan.Data.Abstractions.Filtering;
 
-using Koan.Data.Abstractions.Analytics;
 namespace Koan.Data.Analytics.Recipes;
 
 /// <summary>
