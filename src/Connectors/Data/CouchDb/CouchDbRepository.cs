@@ -231,16 +231,16 @@ internal sealed class CouchDbRepository<TEntity, TKey> :
 
     public async Task<bool> ConditionalReplaceAsync(
         TEntity model,
-        Expression<Func<TEntity, bool>> guard,
+        Filter guard,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(guard);
+        var predicate = InMemoryFilterEvaluator.CompileConditional<TEntity>(guard);
         await DemandWrite("conditional replace", ct).ConfigureAwait(false);
         var container = await ReadyContainer(ct).ConfigureAwait(false);
         var client = _clients.Get(_route);
         var key = _entity.IdentityId(model);
-        var predicate = InMemoryFilterEvaluator.Compile<TEntity>(LinqFilterCompiler.Compile(guard));
 
         for (var attempt = 0; attempt < 2; attempt++)
         {

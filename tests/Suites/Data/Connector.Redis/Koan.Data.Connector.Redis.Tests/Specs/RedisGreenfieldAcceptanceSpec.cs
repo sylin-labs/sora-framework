@@ -95,10 +95,10 @@ public sealed class RedisGreenfieldAcceptanceSpec(RedisFixture fixture, ITestOut
 
         (await repository.ConditionalReplaceAsync(
             new RedisJob { Id = saved.Id, State = "running", Owner = "node-1" },
-            job => job.State == "queued")).Should().BeTrue();
+            Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<RedisJob>(job => job.State == "queued"))).Should().BeTrue();
         (await repository.ConditionalReplaceAsync(
             new RedisJob { Id = saved.Id, State = "running", Owner = "node-2" },
-            job => job.State == "queued")).Should().BeFalse();
+            Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<RedisJob>(job => job.State == "queued"))).Should().BeFalse();
         (await RedisJob.Get(saved.Id))!.Owner.Should().Be("node-1");
     }
 

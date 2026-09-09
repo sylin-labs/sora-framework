@@ -34,12 +34,12 @@ public sealed class CouchbaseConditionalReplaceSpec(CouchbaseFixture fixture, IT
 
         // (a) Guard holds (status == queued) -> claim applied.
         var claim1 = new CasJob { Id = saved.Id, Status = "running", Owner = "node-1" };
-        (await cas!.ConditionalReplaceAsync(claim1, j => j.Status == "queued")).Should().BeTrue();
+        (await cas!.ConditionalReplaceAsync(claim1, Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<CasJob>(j => j.Status == "queued"))).Should().BeTrue();
         (await CasJob.All(partition)).Single().Owner.Should().Be("node-1");
 
         // (b) Guard is now stale (status == running, not queued) -> no-op, store unchanged.
         var claim2 = new CasJob { Id = saved.Id, Status = "running", Owner = "node-2" };
-        (await cas!.ConditionalReplaceAsync(claim2, j => j.Status == "queued")).Should().BeFalse();
+        (await cas!.ConditionalReplaceAsync(claim2, Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<CasJob>(j => j.Status == "queued"))).Should().BeFalse();
         (await CasJob.All(partition)).Single().Owner.Should().Be("node-1"); // node-2 lost the race
     }
 }

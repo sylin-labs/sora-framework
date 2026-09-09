@@ -364,6 +364,26 @@ public static class Data<TEntity, TKey>
     // ------------------------------------------------------------------
     // Writes
     // ------------------------------------------------------------------
+    /// <summary>Atomically replace an existing identity whose stored row matches the guard. No insertion or retry.</summary>
+    public static Task<bool> ReplaceIf(TEntity model, Expression<Func<TEntity, bool>> guard,
+        string? partition = null, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(model);
+        ArgumentNullException.ThrowIfNull(guard);
+        ct.ThrowIfCancellationRequested();
+        // Lower synchronously at contribution time. The facade owns the immutable snapshot before its first await.
+        var normalized = LinqFilterCompiler.Compile(guard);
+        return Execute();
+
+        async Task<bool> Execute()
+        {
+            using var scope = WithPartition(partition);
+            var conditional = As<IConditionalWriteRepository<TEntity, TKey>>()
+                ?? throw new NotSupportedException($"The selected repository for {typeof(TEntity).Name} cannot guarantee conditional replacement. Select a supporting connector and Entity root.");
+            return await conditional.ConditionalReplaceAsync(model, normalized, ct).ConfigureAwait(false);
+        }
+    }
+
     public static Task<bool> Delete(TKey id, CancellationToken ct = default)
     {
         var context = EntityContext.Current;

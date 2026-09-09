@@ -275,7 +275,7 @@ public sealed class NpgsqlRepository<TEntity, TKey> :
 
     public async Task<bool> ConditionalReplaceAsync(
         TEntity model,
-        Expression<Func<TEntity, bool>> guard,
+        Filter guard,
         CancellationToken ct = default)
     {
         await Ready(ct).ConfigureAwait(false);
@@ -284,7 +284,7 @@ public sealed class NpgsqlRepository<TEntity, TKey> :
         var parameters = new SqlParameters();
         var set = UpdateSet(command.Values, parameters, "set_");
         var identity = IdentityPredicate(command.Identity, "key_", parameters);
-        var (condition, conditionValues) = Where(LinqFilterCompiler.Compile(guard));
+        var (condition, conditionValues) = Where(guard);
         Add(parameters, conditionValues, "p");
         var sql = $"UPDATE {_plan.QualifiedTable} SET {set} WHERE {identity}" +
                   (condition is null ? string.Empty : $" AND ({condition})");

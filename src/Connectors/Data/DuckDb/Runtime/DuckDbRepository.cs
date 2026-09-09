@@ -289,7 +289,7 @@ internal sealed class DuckDbRepository<TEntity, TKey> :
 
     public async Task<bool> ConditionalReplaceAsync(
         TEntity model,
-        Expression<Func<TEntity, bool>> guard,
+        Filter guard,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(model);
@@ -302,7 +302,7 @@ internal sealed class DuckDbRepository<TEntity, TKey> :
         await using var command = connection.CreateCommand();
         var set = UpdateSet(command, plan, write.Values, "set_");
         var identity = IdentityPredicate(command, write.Identity, "key_");
-        var (condition, values) = Where(plan, LinqFilterCompiler.Compile(guard));
+        var (condition, values) = Where(plan, guard);
         AddParameters(command, values, "p");
         command.CommandText = $"UPDATE {plan.QualifiedTable} SET {set} WHERE {identity} AND ({condition})";
         return await command.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 1;

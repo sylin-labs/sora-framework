@@ -1206,35 +1206,88 @@ internal sealed partial class RepositoryFacade<TEntity, TKey> :
             "Use RemoveStrategy.Safe or Optimized so Koan can delete bounded visible pages.");
     }
 
-    // Forward the inner adapter's conditional compare-and-set (probe via DataCaps.Write.ConditionalReplace). Under an
-    // active scope this fails closed: the compare-and-set guard is a CLR predicate over POCO properties and cannot carry
-    // the isolation predicate (the managed equality OR a predicate axis's read-filter), so a CAS could retarget a row in
-    // another scope. The trigger rides the contributor union (a pure predicate axis has no managed field). Use Upsert.
-    public async Task<bool> ConditionalReplaceAsync(TEntity model, Expression<Func<TEntity, bool>> guard, CancellationToken ct = default)
+    // One normalized guard enters before readiness or lifecycle awaits. The optional native primitive
+    // never inherits an ordinary upsert fallback or changes the identity selected by the caller.
+    public async Task<bool> ConditionalReplaceAsync(TEntity model, Filter guard, CancellationToken ct = default)
     {
-        await using var operationScope = await Guard(DataOperationEffect.Write, "entity conditional replace", ct);
-        var segmentation = operationScope.Segmentation;
-        if (IsReadScoped(segmentation) || (HasManaged && CurrentManagedValues(segmentation) is not null))
-            throw new NotSupportedException(
-                $"ConditionalReplaceAsync is not supported for scoped entity '{typeof(TEntity).Name}' under an " +
-                "active scope — the compare-and-set guard cannot carry the isolation predicate. Use Upsert (conflict-aware).");
+        ArgumentNullException.ThrowIfNull(model);
+        ArgumentNullException.ThrowIfNull(guard);
+        ct.ThrowIfCancellationRequested();
+        if (!StableConditionalKey(typeof(TKey)) || EqualityComparer<TKey>.Default.Equals(model.Id, default!) ||
+            model.Id is string text && string.IsNullOrWhiteSpace(text))
+            throw new NotSupportedException("Conditional replacement requires a non-default immutable scalar identity.");
+        if (model.GetType() != typeof(TEntity) || EntityRootDescriptor.For(typeof(TEntity)).IsVariant)
+            throw new NotSupportedException("Conditional replacement of Entity variants requires an exact native membership guard and is not supported.");
+        var submittedKey = model.Id;
+        var routing = EntityContext.Current;
+        var frozen = Filter.Snapshot(guard, requireImmutableValues: true)!;
+        Filter.RequireRowOnly(frozen, "Conditional replacement");
         var capabilities = DataCaps.Describe(_inner, _inner.GetType().Name);
         if (!capabilities.Has(DataCaps.Write.ConditionalReplace) ||
             _inner is not IConditionalWriteRepository<TEntity, TKey> cas)
-            throw new NotSupportedException($"The adapter backing {typeof(TEntity).Name} does not support conditional replace.");
+            throw new NotSupportedException($"The adapter backing {typeof(TEntity).Name} does not support conditional replacement. Select a supporting connector; ordinary Save cannot preserve the guard.");
+        var guardSupport = capabilities.Detail<FilterSupport>(DataCaps.Query.Filter) ?? FilterSupport.None;
+        if (FilterSplitter.Split(frozen, guardSupport, typeof(TEntity)).Residual is not null)
+            throw new NotSupportedException("Conditional replacement requires a complete native row predicate. CLR or residual guards are not supported.");
+        DemandConditionalFields(frozen);
+        if (routing?.TransactionCoordinator is not null)
+            throw new NotSupportedException("Conditional replacement cannot run in a deferred coordination scope.");
 
+        await using var operationScope = await Guard(DataOperationEffect.Write, "entity conditional replace", ct, ensureReadiness: false);
+        DemandUnscopedConditional(operationScope.Segmentation);
+        if (_sourcePlan.UsesLegacyProvisioningReadiness) await _inner.EnsureReady(ct);
         EntityLifecycleContext<TEntity>? context = null;
         if (_lifecycle is { HasUpsert: true })
-            context = await _lifecycle.BeginUpsert(model, token => ReadPrior(model, segmentation, token), ct);
+            context = await _lifecycle.BeginUpsert(model, token => ReadPrior(model, operationScope.Segmentation, token), ct);
 
         var current = context?.Current ?? model;
         WritePlanFor(current).ApplyAll(current);
-        // Field transform (ARCH-0098 Blocker 2): persist an encrypted clone so a CAS write never stores plaintext.
-        // A classified property must NOT appear in the guard (it compares stored ciphertext to caller plaintext).
-        var replaced = await cas.ConditionalReplaceAsync(WritePayload(current), guard, ct);
+        var payload = WritePayload(current);
+        if (current.GetType() != typeof(TEntity) || payload.GetType() != typeof(TEntity))
+            throw new NotSupportedException("Conditional replacement cannot substitute a variant during lifecycle or write preparation.");
+        if (!Filter.EquivalentValue(submittedKey, current.Id) ||
+            !Filter.EquivalentValue(submittedKey, payload.Id))
+            throw new InvalidOperationException("Conditional replacement cannot change the submitted identity during lifecycle or write preparation.");
+        if (!Equals(routing, EntityContext.Current) ||
+            (_resolveRoute is not null && _resolveRoute()?.RepositoryIdentity != _routeBinding?.RepositoryIdentity))
+            throw new InvalidOperationException("Conditional replacement routing changed during preparation. Start a new operation in the intended scope.");
+        DemandUnscopedConditional(_segmentation.Bind("entity conditional replace"));
+        ct.ThrowIfCancellationRequested();
+        var replaced = await cas.ConditionalReplaceAsync(payload, frozen, ct);
         if (replaced && context is not null)
             await _lifecycle!.CompleteUpsert(context, current);
         return replaced;
+    }
+
+    private void DemandUnscopedConditional(DataSegmentationBinding segmentation)
+    {
+        if (IsReadScoped(segmentation) || (HasManaged && CurrentManagedValues(segmentation) is not null))
+            throw new NotSupportedException($"Conditional replacement for '{typeof(TEntity).Name}' cannot preserve the active managed or read scope. Use a qualified unscoped source; ordinary Save cannot preserve the guard.");
+    }
+
+    private static bool StableConditionalKey(Type type) => type.IsPrimitive || type.IsEnum ||
+        type == typeof(string) || type == typeof(decimal) || type == typeof(Guid) ||
+        type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(TimeSpan) ||
+        type == typeof(DateOnly) || type == typeof(TimeOnly);
+
+    private static void DemandConditionalFields(Filter filter)
+    {
+        switch (filter)
+        {
+            case AllOf all:
+                foreach (var item in all.Operands) DemandConditionalFields(item);
+                break;
+            case AnyOf any:
+                foreach (var item in any.Operands) DemandConditionalFields(item);
+                break;
+            case Not not: DemandConditionalFields(not.Operand); break;
+            case FieldFilter field:
+                var resolved = FieldPathResolver.Resolve(typeof(TEntity), field.Field);
+                if (resolved.IsManaged || resolved.Members.Any(member =>
+                        member.IsDefined(typeof(Koan.Data.Abstractions.Annotations.ClassifiedAttribute), inherit: true)))
+                    throw new NotSupportedException("Conditional guards cannot compare managed or classified fields. Use an ordinary persisted revision field.");
+                break;
+        }
     }
 
     public IBatchSet<TEntity, TKey> CreateBatch() => new BatchFacade(this);

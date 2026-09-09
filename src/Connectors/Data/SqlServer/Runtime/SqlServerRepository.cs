@@ -239,7 +239,7 @@ internal sealed class SqlServerRepository<TEntity, TKey> :
     }
 
     public async Task<bool> ConditionalReplaceAsync(
-        TEntity model, Expression<Func<TEntity, bool>> guard, CancellationToken ct = default)
+        TEntity model, Filter guard, CancellationToken ct = default)
     {
         await Ready(ct).ConfigureAwait(false);
         _options.SourcePlan.Demand(DataOperationEffect.Write, "conditional replace");
@@ -248,7 +248,7 @@ internal sealed class SqlServerRepository<TEntity, TKey> :
         var parameters = new SqlParameters();
         var set = UpdateSet(plan, command.Values, parameters, "set_");
         var identity = IdentityPredicate(command.Identity, "key_", parameters);
-        var (condition, conditionValues) = Where(plan, LinqFilterCompiler.Compile(guard));
+        var (condition, conditionValues) = Where(plan, guard);
         Add(parameters, conditionValues, "p");
         await using var connection = await Open(ct).ConfigureAwait(false);
         return await AdoCommands.ExecuteAsync(

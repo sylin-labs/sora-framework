@@ -58,3 +58,7 @@ Technical reference for maintainers. Status: **supported** (`couchdb-data-provid
   filter-convergence corpus WITH the strict pushdown guard (`$like` posture pinned residual-and-
   recorded), paged windows through the declared sort fallback, capability truth, boot provenance.
 - Packaging: `dotnet pack` with the release-train version; package id `Sylin.Koan.Data.Connector.CouchDb`.
+
+Conditional replacement consumes the normalized Filter, qualifies it through CompileConditional, and
+retains the observed `_rev` fence. Managed, binary and DateTime guard fields refuse before document
+reads because the CLR evaluator does not establish the required comparison meaning for those shapes.

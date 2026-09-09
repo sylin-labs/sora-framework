@@ -85,10 +85,11 @@ public sealed class InviteIssuanceService
     {
         if (Data<TenantInvite, string>.Capabilities.Has(DataCaps.Write.ConditionalReplace))
         {
-            var cas = Data<TenantInvite, string>.As<IConditionalWriteRepository<TenantInvite, string>>();
+            var cas = Data<TenantInvite, string>.As<IConditionalWriteRepository<TenantInvite, string>>()
+                ?? throw new NotSupportedException("The selected repository advertises conditional replacement but cannot execute it.");
             return await cas.ConditionalReplaceAsync(
                 revoked,
-                r => r.Status == TenantInviteStatus.Pending || r.Status == TenantInviteStatus.Claimed,
+                Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<TenantInvite>(r => r.Status == TenantInviteStatus.Pending || r.Status == TenantInviteStatus.Claimed),
                 ct).ConfigureAwait(false);
         }
 

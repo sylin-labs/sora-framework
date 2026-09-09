@@ -22,9 +22,10 @@ internal static class MySqlFeatures
         foreach (var capability in All) claims.Capability(capability);
     }
 
-    public static void Describe(ICapabilities capabilities)
+    public static void Describe(ICapabilities capabilities, bool conditionalReplace = true)
     {
-        foreach (var capability in All) capabilities.Add(capability);
+        foreach (var capability in All)
+            if (conditionalReplace || capability != DataCaps.Write.ConditionalReplace) capabilities.Add(capability);
         capabilities
             .Add(DataCaps.Query.Filter, RelationalFilterSupport.Default)
             .Add(DataCaps.Query.FilterExecution, new FilterExecutionProfile(FilterExecutionKind.Native));

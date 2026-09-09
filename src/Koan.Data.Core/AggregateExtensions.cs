@@ -1,5 +1,6 @@
 using Koan.Core;
 using Koan.Core.Hosting.App;
+using System.Linq.Expressions;
 using Koan.Data.Abstractions;
 using Koan.Data.Core.Model;
 
@@ -16,6 +17,20 @@ public static class AggregateExtensions
 
     private static IDataService DataService()
         => AppHost.GetRequiredService<IDataService>(DataOperation);
+
+    /// <summary>Replace an existing row only while its stored state matches the guard. False means missing or conflict.
+    /// Null partition inherits; empty selects the default. An exception after dispatch does not imply rollback.</summary>
+    public static Task<bool> ReplaceIf<TEntity>(this TEntity model, Expression<Func<TEntity, bool>> guard,
+        string? partition = null, CancellationToken ct = default)
+        where TEntity : class, IEntity<string>
+        => Data<TEntity, string>.ReplaceIf(model, guard, partition, ct);
+
+    /// <summary>Key-inferred guarded replacement for Entity receivers with non-string keys.</summary>
+    public static Task<bool> ReplaceIf<TEntity, TKey>(this Model.Entity<TEntity, TKey> model,
+        Expression<Func<TEntity, bool>> guard, string? partition = null, CancellationToken ct = default)
+        where TEntity : class, IEntity<TKey>
+        where TKey : notnull
+        => Data<TEntity, TKey>.ReplaceIf((TEntity)(object)model, guard, partition, ct);
 
     // Instance-level convenience: model.Upsert() (generic key)
     /// <summary>

@@ -172,3 +172,7 @@ null/unscoped binding changes, multiple targets, and operation-local evidence in
 Counterpart identity evidence is initially qualified for string, Guid, and the eight integral CLR
 key types. Mapped identities and other key types (including mutable byte[] keys) do not advertise
 SupportsSameIdIn and reject counterpart binding. Ordinary persistence support is unchanged.
+
+Conditional replacement consumes a normalized Filter and performs one acknowledged native `_id`
+ReplaceOne. Explicit mapped keys do not advertise this capability and refuse before store access:
+a map alone does not prove physical uniqueness. Ordinary mapped reads/writes remain available.

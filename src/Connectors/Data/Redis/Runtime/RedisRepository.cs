@@ -227,13 +227,16 @@ internal sealed class RedisRepository<TEntity, TKey> :
 
     public async Task<bool> ConditionalReplaceAsync(
         TEntity model,
-        Expression<Func<TEntity, bool>> guard,
+        Filter guard,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(guard);
         DemandWrite("conditionally replace Redis entity");
-        var predicate = InMemoryFilterEvaluator.Compile<TEntity>(LinqFilterCompiler.Compile(guard));
+        var expiry = Expiry(model);
+        if (expiry == TimeSpan.Zero)
+            throw new NotSupportedException("Redis conditional replacement cannot perform an immediate-expiry deletion. Use a non-expiring or positive-lived replacement.");
+        var predicate = InMemoryFilterEvaluator.CompileConditional<TEntity>(guard);
         var set = Set(EntityContext.Current?.Partition);
         var key = (RedisKey)set.Record(_entity.Identity(model.Id));
         for (var attempt = 0; attempt < Infrastructure.Constants.MaximumConditionalAttempts; attempt++)
@@ -244,8 +247,6 @@ internal sealed class RedisRepository<TEntity, TKey> :
             if (!predicate(currentRecord.Entity) || !ManagedGuardMatches(currentRecord.Managed)) return false;
             var document = _entity.Mapping is null ? _entity.Create(model) : Newtonsoft.Json.Linq.JObject.Parse(current!);
             if (_entity.Mapping is not null) _entity.Apply(document, model, MappingWriteOperation.ConditionalWrite);
-            var expiry = Expiry(model);
-            if (expiry == TimeSpan.Zero) return await Delete(model.Id, ct).ConfigureAwait(false);
             var transaction = _route.Data.CreateTransaction();
             transaction.AddCondition(Condition.StringEqual(key, current));
             _ = transaction.StringSetAsync(key, document.ToString(Newtonsoft.Json.Formatting.None), RedisExpiry(expiry));

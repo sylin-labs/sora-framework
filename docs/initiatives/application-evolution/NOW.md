@@ -18,12 +18,12 @@ Read the [charter](README.md) and [live ledger](PROGRESS.md), then
 
 ## Current corrective slice
 
-Resume [AE-10 conditional field access](work-items/10-field-access.md) on the existing working
-tree. Coordinate Web/MCP source and build ownership before testing. 132 focused checks and independent
-source review pass locally; repository coherence and normal publication remain; the card holds exact receipts and compatibility boundaries. AE-07/08/09 were
-published in release 34390309739. Brownfield public-package validation remains a separate receipt.
-Do not replace this work with a new ledger or start AE-02 while the corrective slice is unsettled.
-
+Resume [AE-11 conditional publication](work-items/11-conditional-publication.md) on the existing
+working tree. Coordinate Core/native/Cache tests and the separate Web discovery correction before
+building. The accepted contract uses one Entity ReplaceIf verb and the existing normalized Filter
+primitive; 86 focused tests and warning-clean adapter/signature builds pass. Independent source review accepted the bounded contract; all eight repository coherence legs pass and normal publication remains. AE-10 is committed at 7a74225cc. Normal
+publication and public-package brownfield acceptance remain distinct from local owner checks.
+Do not start another ledger or AE-02 while this corrective slice is unsettled.
 ## After the current corrective slice
 
 1. Check the working tree and owners, then claim [AE-02](work-items/02-application-evolution.md).

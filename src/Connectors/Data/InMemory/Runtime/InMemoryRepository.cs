@@ -1,5 +1,5 @@
 using System.Collections.Concurrent;
-using System.Linq.Expressions;
+using Koan.Data.Abstractions.Filtering;
 using Koan.Core.Capabilities;
 using Koan.Data.Abstractions;
 using Koan.Data.Abstractions.Failures;
@@ -33,26 +33,22 @@ internal sealed class InMemoryRepository<TEntity, TKey>(InMemoryState state, str
             inserted ? DataCommitOutcome.Committed : DataCommitOutcome.NotCommitted));
     }
 
-    /// <summary>Guarded conditional replace (the in-memory analogue of the relational CAS): the store is
-    /// a concurrent snapshot map, so the read→guard→write sequence runs under the adapter gate — the
-    /// guard always evaluates the STORED row, and a false guard leaves it untouched.</summary>
-    public async Task<bool> ConditionalReplaceAsync(
-        TEntity model,
-        Expression<Func<TEntity, bool>> guard,
-        CancellationToken ct = default)
+    /// <summary>Compare the observed immutable stored record at the final dictionary update. Ordinary
+    /// saves, deletes and clears participate without a separate lock or a read-then-write gap.</summary>
+    public async Task<bool> ConditionalReplaceAsync(TEntity model, Filter guard, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(model);
+        ArgumentNullException.ThrowIfNull(guard);
         ct.ThrowIfCancellationRequested();
-        var guardFn = guard.Compile();
+        var guardFn = InMemoryFilterEvaluator.CompileConditional<TEntity>(guard);
         var store = Current();
-        lock (state.RowGate)
-        {
-            if (!store.TryGetValue(model.Id!, out var record)) return false;
-            var stored = Materialize(record);
-            if (!guardFn(stored.Entity)) return false;
-            var snapshot = GuardAndSnapshotAsync(model, ct).GetAwaiter().GetResult();
-            WriteAsync(model.Id!, snapshot, ct).GetAwaiter().GetResult();
-        }
-        return true;
+        if (!store.TryGetValue(model.Id, out var observed)) return false;
+        if (!guardFn(Materialize(observed).Entity)) return false;
+        var prepared = await GuardAndSnapshotAsync(model, ct).ConfigureAwait(false);
+        var replacement = new InMemoryState.Record(
+            EntityJsonSerialization.SerializeDocument(prepared.Entity), CopyManaged(prepared.Managed));
+        ct.ThrowIfCancellationRequested();
+        return store.TryUpdate(model.Id, replacement, observed);
     }
 
     protected override Task<KvRecord<TEntity>?> ReadAsync(TKey id, CancellationToken ct)

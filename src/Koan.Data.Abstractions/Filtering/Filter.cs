@@ -112,7 +112,7 @@ public abstract record Filter
             value.GetType().IsPrimitive || value.GetType().IsEnum) return value;
         if (value is byte[] bytes) return bytes.ToArray();
         if (!strict) return value;
-        throw new NotSupportedException($"Counterpart filter snapshots cannot capture mutable or unsupported '{value.GetType().Name}' values. Use immutable scalar values or a set of immutable scalar values.");
+        throw new NotSupportedException($"Immutable filter snapshots cannot capture mutable or unsupported '{value.GetType().Name}' values. Use immutable scalar values or a set of immutable scalar values.");
     }
 
     /// <summary>Conjunction builder — every operand must match.</summary>

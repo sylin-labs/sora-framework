@@ -101,35 +101,31 @@ public sealed class InviteAcceptanceService
         // --- the claim (the contested write) ---
         if (invite.Status == TenantInviteStatus.Pending)
         {
-            for (var attempt = 1; ; attempt++)
+            ct.ThrowIfCancellationRequested();
+            var claimed = invite.Clone();
+            claimed.Status = TenantInviteStatus.Claimed;
+            claimed.ClaimedBy = identityId;
+            claimed.ClaimedAt = DateTimeOffset.UtcNow;
+            claimed.ClaimAttempts++;
+            if (await cas.ConditionalReplaceAsync(
+                    claimed,
+                    Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<TenantInvite>(r => r.Status == TenantInviteStatus.Pending
+                         && r.ClaimedBy == null
+                         && r.ExpiresAt > DateTimeOffset.UtcNow),
+                    ct).ConfigureAwait(false))
             {
-                ct.ThrowIfCancellationRequested();
-                var claimed = invite.Clone();
-                claimed.Status = TenantInviteStatus.Claimed;
-                claimed.ClaimedBy = identityId;
-                claimed.ClaimedAt = DateTimeOffset.UtcNow;
-                claimed.ClaimAttempts++;
-                if (await cas.ConditionalReplaceAsync(
-                        claimed,
-                        r => r.Status == TenantInviteStatus.Pending
-                             && r.ClaimedBy == null
-                             && r.ExpiresAt > DateTimeOffset.UtcNow,
-                        ct).ConfigureAwait(false))
-                {
-                    invite = claimed;
-                    break;
-                }
-
+                invite = claimed;
+            }
+            else
+            {
                 // Lost the race or the store refused: re-read and classify honestly.
                 var stored = await TenantInvite.Get(invite.Id, ct).ConfigureAwait(false)
                              ?? throw new InvalidOperationException($"Invitation {invite.Id} vanished during the claim.");
                 if (stored.Status == TenantInviteStatus.Claimed
                     && string.Equals(stored.ClaimedBy, identityId, StringComparison.Ordinal))
-                {
-                    invite = stored;   // our own earlier claim — interrupted run, recover below
-                    break;
-                }
-                return new InviteAcceptResult(Classify(stored), null);
+                    invite = stored; // Recover our own interrupted claim below.
+                else
+                    return new InviteAcceptResult(Classify(stored), null);
             }
         }
 
@@ -155,8 +151,8 @@ public sealed class InviteAcceptanceService
             accepted.AcceptedAt = DateTimeOffset.UtcNow;
             if (await cas.ConditionalReplaceAsync(
                     accepted,
-                    r => r.Status == TenantInviteStatus.Claimed
-                         && string.Equals(r.ClaimedBy, identityId, StringComparison.Ordinal),
+                    Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<TenantInvite>(r => r.Status == TenantInviteStatus.Claimed
+                         && r.ClaimedBy == identityId),
                     ct).ConfigureAwait(false))
             {
                 break;

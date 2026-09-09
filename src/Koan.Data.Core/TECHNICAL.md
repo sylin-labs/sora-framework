@@ -374,3 +374,19 @@ including no-count keyed reads. Data's raw candidate boundary avoids duplicate p
 counterpart receipts carry execution-local evidence. Load lifecycle, relationship materialization,
 and streams verify returned row references/identities and Data scope before release. Evidence does
 not establish a shared count/page snapshot or permission for rows added by later Web hooks.
+
+## Conditional replacement
+
+Entity ReplaceIf lowers its lambda synchronously, enters the requested partition, resolves the
+existing conditional repository and awaits it through completion. RepositoryFacade strictly snapshots
+the Filter before its first await and requires a complete native row guard and conditional capability.
+It rejects default/unstable keys, variants, classified/managed guard fields, residual/CLR/counterpart
+nodes, active managed/read scopes and deferred coordination. Source policy/operation leases still apply.
+Provider-specific mapping/value qualification may occur after advisory BeforeUpsert, before mutation.
+
+The captured key and route must survive lifecycle and write preparation. One native dispatch returns
+false for missing/conflict and true for an acknowledged match, including an identical replacement.
+Only true invokes AfterUpsert. Before/Prior is advisory, not the atomic preimage. Exceptions after
+native dispatch are preserved and can represent an unknown or confirmed commit; there is no retry,
+rollback promise or conversion to false. Mutable in-flight caller models are not a concurrency API.
+EntityVariantRepository masks conditional support until exact native membership is qualified.

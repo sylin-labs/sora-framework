@@ -226,8 +226,8 @@ internal sealed class DataJobLedger : IJobLedger
                 Mark(candidate, owner, now, leaseUntil);
                 claimed = await cas.ConditionalReplaceAsync(
                     candidate,
-                    r => r.Status == JobStatus.Queued && r.Owner == null
-                         && (r.ReservedFor == null || r.ReservedFor == owner || (r.ReservedUntil != null && r.ReservedUntil < now)),
+                    Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<JobRecord>(r => r.Status == JobStatus.Queued && r.Owner == null
+                         && (r.ReservedFor == null || r.ReservedFor == owner || (r.ReservedUntil != null && r.ReservedUntil < now))),
                     ct)
                     ? candidate : null;
             }
@@ -262,7 +262,7 @@ internal sealed class DataJobLedger : IJobLedger
         if (cas is not null)
         {
             current.LeaseUntil = leaseUntil;
-            return await cas.ConditionalReplaceAsync(current, r => r.Status == JobStatus.Running && r.Owner == owner, ct);
+            return await cas.ConditionalReplaceAsync(current, Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<JobRecord>(r => r.Status == JobStatus.Running && r.Owner == owner), ct);
         }
 
         current.LeaseUntil = leaseUntil;
@@ -286,7 +286,7 @@ internal sealed class DataJobLedger : IJobLedger
         {
             return await cas.ConditionalReplaceAsync(
                 record,
-                r => r.Status == JobStatus.Running && r.Owner == expectedOwner,
+                Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<JobRecord>(r => r.Status == JobStatus.Running && r.Owner == expectedOwner),
                 ct);
         }
 
@@ -318,7 +318,7 @@ internal sealed class DataJobLedger : IJobLedger
             candidate.ReservedUntil = reservedUntil;
             return await cas.ConditionalReplaceAsync(
                 candidate,
-                r => r.Status == JobStatus.Queued && r.ReservedFor == null,
+                Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<JobRecord>(r => r.Status == JobStatus.Queued && r.ReservedFor == null),
                 ct);
         }
 

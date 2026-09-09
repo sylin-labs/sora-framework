@@ -339,7 +339,7 @@ public sealed class EntityExecutionSemanticsSpec
         var facade = new RepositoryFacade<ReceiptEntity, string>(unadvertised);
 
         var unsupported = () => facade.ConditionalReplaceAsync(
-            new ReceiptEntity { Id = "one" }, entity => entity.Value == "prior");
+            new ReceiptEntity { Id = "one" }, Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<ReceiptEntity>(entity => entity.Value == "prior"));
 
         await unsupported.Should().ThrowAsync<NotSupportedException>();
         unadvertised.ConditionalCalls.Should().Be(0);
@@ -350,7 +350,7 @@ public sealed class EntityExecutionSemanticsSpec
         };
         facade = new RepositoryFacade<ReceiptEntity, string>(advertised);
         var lostRace = await facade.ConditionalReplaceAsync(
-            new ReceiptEntity { Id = "one" }, entity => entity.Value == "prior");
+            new ReceiptEntity { Id = "one" }, Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<ReceiptEntity>(entity => entity.Value == "prior"));
 
         lostRace.Should().BeFalse();
         advertised.ConditionalCalls.Should().Be(1);
@@ -468,7 +468,11 @@ public sealed class EntityExecutionSemanticsSpec
         {
             if (advertiseAtomic) capabilities.Add(DataCaps.Write.AtomicBatch);
             if (advertiseOutcomes) capabilities.Add(DataCaps.Write.MutationOutcomes);
-            if (advertiseConditional) capabilities.Add(DataCaps.Write.ConditionalReplace);
+            if (advertiseConditional)
+            {
+                capabilities.Add(DataCaps.Write.ConditionalReplace);
+                capabilities.Add(DataCaps.Query.Filter, FilterSupport.Full);
+            }
             if (advertiseInsert) capabilities.Add(DataCaps.Write.InsertOnly);
         }
 
@@ -504,7 +508,7 @@ public sealed class EntityExecutionSemanticsSpec
 
         public Task<bool> ConditionalReplaceAsync(
             ReceiptEntity model,
-            Expression<Func<ReceiptEntity, bool>> guard,
+            Koan.Data.Abstractions.Filtering.Filter guard,
             CancellationToken ct = default)
         {
             ConditionalCalls++;

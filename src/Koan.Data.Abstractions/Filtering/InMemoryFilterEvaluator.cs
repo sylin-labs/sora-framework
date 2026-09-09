@@ -14,6 +14,35 @@ namespace Koan.Data.Abstractions.Filtering;
 /// </summary>
 public static class InMemoryFilterEvaluator
 {
+    /// <summary>Compile a complete row guard for an adapter that fences the observed document using native CAS.
+    /// Binary and DateTime equality are not qualified for conditional writes by this evaluator.</summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public static Func<T, bool> CompileConditional<T>(Filter filter)
+    {
+        Filter.RequireRowOnly(filter, "Conditional replacement");
+        Demand(filter);
+        return Compile<T>(filter);
+
+        static void Demand(Filter guard)
+        {
+            switch (guard)
+            {
+                case AllOf all: foreach (var item in all.Operands) Demand(item); break;
+                case AnyOf any: foreach (var item in any.Operands) Demand(item); break;
+                case Not not: Demand(not.Operand); break;
+                case FieldFilter field:
+                    var resolved = FieldPathResolver.Resolve(typeof(T), field.Field);
+                    if (resolved.IsManaged || resolved.ComparableType == typeof(DateTime) ||
+                        resolved.ComparableType == typeof(byte[]) || resolved.LeafType == typeof(byte[]) ||
+                        field.Value is FilterValue.Scalar { Value: DateTime or byte[] } ||
+                        field.Value is FilterValue.Set set && set.Values.Any(value => value is DateTime or byte[]))
+                        throw new NotSupportedException("Document CAS guards evaluated in memory do not support managed, DateTime or binary fields. Use an immutable string, Guid or numeric revision.");
+                    break;
+                default: throw new NotSupportedException("Conditional replacement requires a complete normalized row predicate.");
+            }
+        }
+    }
+
     /// <summary>Compiles a filter into a reusable predicate over <typeparamref name="T"/> (fields resolved once).</summary>
     public static Func<T, bool> Compile<T>(Filter filter)
     {

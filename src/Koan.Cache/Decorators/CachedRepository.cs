@@ -23,6 +23,7 @@ namespace Koan.Cache.Decorators;
 internal sealed class CachedRepository<TEntity, TKey> :
     IDataRepository<TEntity, TKey>,
     IInsertOnlyRepository<TEntity, TKey>,
+    IConditionalWriteRepository<TEntity, TKey>,
     ICounterpartQueryRepository,
     IQueryRepository<TEntity, TKey>,
     IRawQueryRepository<TEntity, TKey>,
@@ -209,6 +210,20 @@ internal sealed class CachedRepository<TEntity, TKey> :
             !IsDefaultKey(result.Key))
             await Remove(result.Key, ct);
         return result;
+    }
+
+    public async Task<bool> ConditionalReplaceAsync(TEntity model, Filter guard, CancellationToken ct = default)
+    {
+        if (_inner is not IConditionalWriteRepository<TEntity, TKey> conditional ||
+            !DataCaps.Describe(_inner, _inner.GetType().Name).Has(DataCaps.Write.ConditionalReplace))
+            throw new NotSupportedException($"The adapter backing {_entityName} does not support conditional replacement.");
+        // Capture the existing canonical cache identity before any native await; never seed from a write payload.
+        CacheKey? key = _entityPolicy.Strategy != CacheStrategy.NoCache && TryBuildEntityKey(null, model.Id, out var captured)
+            ? captured : (CacheKey?)null;
+        var replaced = await conditional.ConditionalReplaceAsync(model, guard, ct);
+        if (replaced && key is { } committedKey)
+            await _cacheClient.Remove(committedKey, typeof(TEntity), ct);
+        return replaced;
     }
 
     public async Task<TEntity> Upsert(TEntity model, CancellationToken ct = default)

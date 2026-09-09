@@ -42,6 +42,7 @@ internal sealed class MySqlRepository<TEntity, TKey> :
     private readonly object _plansGate = new();
     private readonly Dictionary<string, MySqlEntityPlan<TEntity, TKey>> _plans = new(StringComparer.Ordinal);
     private readonly int _planLimit;
+    private readonly bool _conditionalReplace;
 
     private MySqlEntityPlan<TEntity, TKey> Plan => ResolvePlan();
 
@@ -49,6 +50,7 @@ internal sealed class MySqlRepository<TEntity, TKey> :
     {
         _services = services;
         _options = options;
+        _conditionalReplace = !new MySqlConnectionStringBuilder(options.ConnectionString).UseAffectedRows;
         _readiness = services.GetRequiredService<DataSourceReadinessCoordinator>();
         _schema = services.GetRequiredService<IRelationalSchemaOrchestrator>();
         _schemaPolicy = new RelationalSchemaPolicy
@@ -67,7 +69,7 @@ internal sealed class MySqlRepository<TEntity, TKey> :
     }
 
     public StorageOptimizationInfo OptimizationInfo { get; }
-    public void Describe(ICapabilities capabilities) => MySqlFeatures.Describe(capabilities);
+    public void Describe(ICapabilities capabilities) => MySqlFeatures.Describe(capabilities, _conditionalReplace);
     public Task EnsureReady(CancellationToken ct = default) => Ready(ct);
 
     public async Task<TEntity?> Get(TKey id, CancellationToken ct = default)
@@ -221,8 +223,10 @@ internal sealed class MySqlRepository<TEntity, TKey> :
     }
 
     public async Task<bool> ConditionalReplaceAsync(
-        TEntity model, Expression<Func<TEntity, bool>> guard, CancellationToken ct = default)
+        TEntity model, Filter guard, CancellationToken ct = default)
     {
+        if (!_conditionalReplace)
+            throw new NotSupportedException("MySQL conditional replacement requires UseAffectedRows=false so a matching unchanged row reports success.");
         await Ready(ct).ConfigureAwait(false);
         _options.SourcePlan.Demand(DataOperationEffect.Write, "conditional replace");
         var plan = Plan;
@@ -230,7 +234,7 @@ internal sealed class MySqlRepository<TEntity, TKey> :
         var parameters = new SqlParameters();
         var set = UpdateSet(plan, command.Values, parameters, "set_");
         var identity = IdentityPredicate(command.Identity, "key_", parameters);
-        var (condition, conditionValues) = Where(plan, LinqFilterCompiler.Compile(guard));
+        var (condition, conditionValues) = Where(plan, guard);
         Add(parameters, conditionValues, "p");
         await using var connection = await Open(ct).ConfigureAwait(false);
         return await AdoCommands.ExecuteAsync(connection, $"UPDATE {plan.QualifiedTable} SET {set} WHERE {identity}" +

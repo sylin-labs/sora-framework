@@ -112,3 +112,8 @@ Queries use the same spelling. Ordinary enum ordering uses declared ordinal rank
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
 Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+
+Conditional replacement consumes the normalized Filter in one UPDATE with identity AND guard.
+Readiness validates the mapped physical primary key before mutation; a nonunique mapped key cannot
+silently update duplicate rows. Matching identical replacements report success. Guard mapping/value
+qualification can follow advisory Entity BeforeUpsert; it still precedes the UPDATE.

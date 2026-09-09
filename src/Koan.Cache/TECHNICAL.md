@@ -92,3 +92,11 @@ primitive. Tag flush enumerates matching entries and emits normal per-key invali
 Counterpart query/count definitions pass through the existing query decorator. The optional
 target-binding contract forwards under Data's guarded target context; no counterpart permission
 or joined result is stored in the entity cache.
+
+## Conditional replacement
+
+The repository decorator forwards the existing conditional-write primitive only when the inner
+interface and capability agree. It captures the canonical entity cache key before awaiting and
+invalidates that key only after a confirmed true result. Conflict/missing/refusal does not seed or
+invalidate a value. A removal failure or cancellation after native success propagates and may leave
+stale cache state after a committed write; no retry or transactional cache guarantee is introduced.

@@ -236,6 +236,11 @@ namespace Koan.Data.Core.Model
             return Data<TEntity, TKey>.Upsert(model, ct);
         }
 
+        /// <summary>Replace an existing row only while its stored state matches the guard. False means missing or conflict.</summary>
+        public static Task<bool> ReplaceIf(TEntity model, Expression<Func<TEntity, bool>> guard,
+            string? partition = null, CancellationToken ct = default)
+            => Data<TEntity, TKey>.ReplaceIf(model, guard, partition, ct);
+
         public static Task<MutationResult<TEntity, TKey>> UpsertWithOutcome(
             TEntity model,
             CancellationToken ct = default)

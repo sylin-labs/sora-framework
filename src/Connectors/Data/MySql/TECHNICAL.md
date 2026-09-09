@@ -49,3 +49,8 @@ Queries use the same spelling. Ordinary enum ordering uses declared ordinal rank
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
 Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+
+Conditional replacement consumes the normalized Filter. A selected connection configured with
+UseAffectedRows=true masks and refuses conditional replacement: changed-row counts cannot distinguish
+an identical matched replacement from conflict. UseAffectedRows=false retains matched-row semantics;
+ordinary Save and other operations keep their existing configuration behavior.

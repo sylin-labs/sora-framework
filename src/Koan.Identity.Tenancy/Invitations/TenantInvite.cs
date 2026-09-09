@@ -9,7 +9,7 @@ namespace Koan.Identity.Tenancy.Invitations;
 /// <see cref="Accepted"/> is the happy path; <see cref="Revoked"/> races the claim (an operator escape
 /// hatch usable while the token is unclaimed or its holder has not completed the seat), and
 /// <see cref="Expired"/> is a derived outcome — the row keeps its stored state and
-/// <see cref="IsRedeemable"/> simply goes false at the expiry instant.</summary>
+/// <see cref="TenantInvite.IsRedeemable"/> simply goes false at the expiry instant.</summary>
 public enum TenantInviteStatus
 {
     Pending = 0,

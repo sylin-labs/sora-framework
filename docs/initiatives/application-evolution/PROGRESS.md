@@ -20,8 +20,8 @@ with links to the actual deliverable and evidence.
 ## Initiative state
 
 - Overall: active; shared-foundation milestone proved with published Koan dependencies.
-- Active implementation card: [AE-10 conditional field access](work-items/10-field-access.md); 132 focused checks and independent source review pass locally; repository coherence and normal publication remain. AE-07/08/09 were published in release 34390309739; public-package brownfield acceptance is separate.
-- Next: run AE-10 repository coherence, then normal publication and public-package consumer validation; AE-02/AE-03 remain planned.
+- Active implementation card: [AE-11 conditional publication](work-items/11-conditional-publication.md), 86 focused tests pass with warning-clean adapter/signature compilation; independent review and all eight repository coherence legs pass. Normal publication is the next gate. AE-10 is committed at 7a74225cc; its discovery correction and public-package acceptance remain separately recorded.
+- Next: normal AE-11 publication after accepted owner evidence, review and coherence. Public-package application adoption remains separate.
 - Independent participants: none recruited; results and productivity measurements unavailable.
 
 ## Work ledger
@@ -40,6 +40,8 @@ with links to the actual deliverable and evidence.
 | [AE-09 Build dependency security](work-items/09-build-dependency-security.md) | in-progress | SourceLink pin selects patched Git build tasks; forced audit restore and focused build pass with zero warnings/errors. Normal package publication remains open. |
 
 | [AE-10 Conditional field access](work-items/10-field-access.md) | in-progress | One property Access owner across typed MVC/shared Entity/MCP; 132 focused checks and independent source acceptance. Normal coherence/publication and public-package adoption remain; exact receipts and limits in card. |
+
+| [AE-11 Conditional publication](work-items/11-conditional-publication.md) | in-progress | Normalized Filter primitive and sole Entity ReplaceIf verb implemented; 86 focused tests pass and all 11 adapter implementations compile. Independent review and all eight coherence legs pass; normal publication and public-package acceptance remain. Exact receipts and limits are in the card. |
 
 Use `in-progress`, `blocked`, `done`, or `stopped` as execution proceeds. A blocker names the
 missing input and useful restart point; stopped work retains its findings. Front matter in

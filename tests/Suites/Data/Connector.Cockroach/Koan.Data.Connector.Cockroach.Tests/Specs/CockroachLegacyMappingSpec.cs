@@ -38,7 +38,7 @@ public sealed class CockroachLegacyMappingSpec(CockroachFixture fixture)
                 .GetRepository<LegacyCustomer, long>()
                 .Should().BeAssignableTo<IConditionalWriteRepository<LegacyCustomer, long>>().Which;
             customer.DisplayName = "Ada, conditionally claimed";
-            (await conditional.ConditionalReplaceAsync(customer, item => item.DisplayName == "Ada Lovelace"))
+            (await conditional.ConditionalReplaceAsync(customer, Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<LegacyCustomer>(item => item.DisplayName == "Ada Lovelace")))
                 .Should().BeTrue();
 
             customer.DisplayName = "Augusta Ada King";

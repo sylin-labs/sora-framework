@@ -253,13 +253,13 @@ public class EmbeddingWorker(
         if (cas is not null)
         {
             var claimed = priorStatus == EmbedJobStatus.Pending
-                ? await cas.ConditionalReplaceAsync(job, value => value.Status == EmbedJobStatus.Pending, ct)
+                ? await cas.ConditionalReplaceAsync(job, Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<EmbedJob<TEntity>>(value => value.Status == EmbedJobStatus.Pending), ct)
                 : await cas.ConditionalReplaceAsync(
                     job,
-                    value => value.Status == EmbedJobStatus.Processing &&
+                    Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<EmbedJob<TEntity>>(value => value.Status == EmbedJobStatus.Processing &&
                              value.Owner == priorOwner &&
                              value.LeaseUntil == priorLeaseUntil &&
-                             value.StartedAt == priorStartedAt,
+                             value.StartedAt == priorStartedAt),
                     ct);
             return claimed ? job : null;
         }
@@ -323,7 +323,7 @@ public class EmbeddingWorker(
         if (cas is not null)
             return await cas.ConditionalReplaceAsync(
                 job,
-                value => value.Status == EmbedJobStatus.Processing && value.Owner == _owner,
+                Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<EmbedJob<TEntity>>(value => value.Status == EmbedJobStatus.Processing && value.Owner == _owner),
                 ct);
 
         await job.Save(ct);
@@ -351,7 +351,7 @@ public class EmbeddingWorker(
         if (cas is not null)
             return await cas.ConditionalReplaceAsync(
                 replacement,
-                value => value.Status == EmbedJobStatus.Processing && value.Owner == _owner,
+                Koan.Data.Abstractions.Filtering.LinqFilterCompiler.Compile<EmbedJob<TEntity>>(value => value.Status == EmbedJobStatus.Processing && value.Owner == _owner),
                 ct);
 
         var current = await EmbedJob<TEntity>.Get(replacement.Id!, ct);

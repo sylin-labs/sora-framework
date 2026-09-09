@@ -69,7 +69,7 @@ internal sealed class MongoRepository<TEntity, TKey> :
 
     public void Describe(ICapabilities capabilities)
     {
-        MongoFeatures.Describe(capabilities, SupportsCounterpart);
+        MongoFeatures.Describe(capabilities, SupportsCounterpart, supportsConditionalReplace: !_entity.IsMapped);
         if (!_entity.IsMapped) capabilities.Add(DataCaps.Write.InsertOnly);
     }
 
@@ -273,32 +273,23 @@ internal sealed class MongoRepository<TEntity, TKey> :
 
     public async Task<bool> ConditionalReplaceAsync(
         TEntity model,
-        Expression<Func<TEntity, bool>> guard,
+        Filter guard,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(guard);
+        if (_entity.IsMapped)
+            throw new NotSupportedException("MongoDB conditional replacement requires native _id identity. Mapped key uniqueness has not been qualified.");
         var filter = Builders<BsonDocument>.Filter.And(
             _entity.Identity(model),
-            _queries.Predicate(LinqFilterCompiler.Compile(guard)),
+            _queries.Predicate(guard),
             _entity.WriteGuard());
         var collection = await Collection(ct).ConfigureAwait(false);
-        if (_entity.IsMapped)
-        {
-            var result = await collection.UpdateOneAsync(filter, _entity.Update(model), cancellationToken: ct)
-                .ConfigureAwait(false);
-            DemandAcknowledged(result.IsAcknowledged);
-            return result.MatchedCount == 1;
-        }
-        else
-        {
-            var result = await collection.ReplaceOneAsync(filter, _entity.Write(model), cancellationToken: ct)
-                .ConfigureAwait(false);
-            DemandAcknowledged(result.IsAcknowledged);
-            return result.MatchedCount == 1;
-        }
+        var result = await collection.ReplaceOneAsync(filter, _entity.Write(model), cancellationToken: ct)
+            .ConfigureAwait(false);
+        DemandAcknowledged(result.IsAcknowledged);
+        return result.MatchedCount == 1;
     }
-
     public IBatchSet<TEntity, TKey> CreateBatch() => new MongoBatch<TEntity, TKey>(CommitBatch);
 
     internal async Task<BatchResult> CommitBatch(

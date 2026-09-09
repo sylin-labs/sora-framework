@@ -1,5 +1,6 @@
 using Koan.Core.Capabilities;
 using Koan.Data.Abstractions;
+using Koan.Data.Abstractions.Capabilities;
 
 namespace Koan.Data.Core.Polymorphism;
 
@@ -92,9 +93,16 @@ internal sealed class EntityVariantRepository<TRoot, TVariant, TKey> :
 
     public void Describe(ICapabilities caps)
     {
-        if (_root() is IDescribesCapabilities described)
+        var root = _root();
+        if (root is IDescribesCapabilities)
         {
-            described.Describe(caps);
+            var rootCapabilities = DataCaps.Describe(root, typeof(TRoot).Name);
+            foreach (var token in rootCapabilities.All)
+            {
+                if (token == DataCaps.Write.ConditionalReplace) continue;
+                if (rootCapabilities.Detail<object>(token) is { } detail) caps.Add(token, detail);
+                else caps.Add(token);
+            }
         }
     }
 

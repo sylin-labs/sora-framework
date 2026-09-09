@@ -113,3 +113,7 @@ Queries use the same spelling. Ordinary enum ordering uses declared ordinal rank
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
 Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+
+Conditional replacement consumes the normalized Filter, qualifies it through CompileConditional, and
+retains the observed native CAS fence. Managed, binary and DateTime guard fields refuse before document
+reads because the CLR evaluator does not establish the required comparison meaning for those shapes.

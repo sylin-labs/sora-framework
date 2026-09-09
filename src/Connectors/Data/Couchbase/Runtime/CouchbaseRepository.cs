@@ -196,14 +196,13 @@ internal sealed class CouchbaseRepository<TEntity, TKey> :
 
     public async Task<bool> ConditionalReplaceAsync(
         TEntity model,
-        Expression<Func<TEntity, bool>> guard,
+        Filter guard,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(model);
         ArgumentNullException.ThrowIfNull(guard);
         DemandWrite("conditionally replace Couchbase document");
-        var filter = LinqFilterCompiler.Compile(guard);
-        var predicate = InMemoryFilterEvaluator.Compile<TEntity>(filter);
+        var predicate = InMemoryFilterEvaluator.CompileConditional<TEntity>(guard);
         var collection = await Collection(Container(EntityContext.Current?.Partition), queryable: false, ct).ConfigureAwait(false);
         var key = _entity.Key(model.Id);
         try

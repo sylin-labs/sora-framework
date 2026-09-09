@@ -237,3 +237,16 @@ native shapes reject. Count and page share predicate meaning, not a transactiona
 
 Explicit empty partitions select default in structured reads and positional Entity Get/GetMany
 helpers; null retains the ambient partition. The caller's scope is restored after execution.
+
+## Guarded replacement
+
+`await replacement.ReplaceIf(stored => stored.Revision == expected, partition: locale, ct: ct)`
+replaces an existing row only when its native guard matches. False means missing or conflict; it
+never inserts; Data dispatches once. Existing bounded failed-compare retries remain adapter behavior.
+Null partition inherits, empty selects default. The guard is captured when
+called, before asynchronous preparation. Ordinary `Save` retains upsert behavior.
+
+Use a qualified connector and an ordinary persisted revision field. Unsupported native predicates,
+variants and active managed/read scopes refuse. BeforeUpsert may run on conflict; AfterUpsert runs
+only after success. A cancellation, cache error or lifecycle exception after dispatch does not imply
+rollback. This protects one destination row, not equality with another document at commit time.
