@@ -3,8 +3,8 @@
   "Sylin.Koan.Data.Core": "1.0.51",
   "Sylin.Koan.AI.Contracts": "1.0.20",
   "Sylin.Koan.AI.Contracts.Shared": "1.0.11",
-  "Sylin.Koan.AI.Orchestration": "1.0.26",
+  "Sylin.Koan.AI.Orchestration": "1.0.27",
   "Sylin.Koan.AI": "1.0.23",
-  "Sylin.Koan.Data.Vector": "1.0.28",
-  "$transitive": "409B3194FAF248BD57B1856AEECD8C4A5BE45DF2146576717F9DA23C793FAB6E"
+  "Sylin.Koan.Data.Vector": "1.0.29",
+  "$transitive": "ECDEBB13F799908F86E2F023DB776CB113558A2647C3282CE07A798278D36CD7"
 }
