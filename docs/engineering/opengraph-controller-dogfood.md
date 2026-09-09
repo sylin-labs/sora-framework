@@ -1,3 +1,16 @@
+---
+type: ANALYSIS
+domain: framework
+title: "OpenGraph controller ownership"
+audience: [maintainers, ai-agents]
+status: archived
+last_updated: 2026-09-09
+framework_version: v1.0.0
+validation:
+  status: reviewed
+  scope: historical dogfeeding evidence classification; original execution claims retained
+---
+
 # OpenGraph controller ownership
 
 **Task:** Preserve controller status and authorization during HTML navigation.

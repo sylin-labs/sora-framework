@@ -1,3 +1,16 @@
+---
+type: ANALYSIS
+domain: framework
+title: "Mongo brownfield compatibility"
+audience: [maintainers, ai-agents]
+status: archived
+last_updated: 2026-09-09
+framework_version: v1.0.0
+validation:
+  status: reviewed
+  scope: historical dogfeeding evidence classification; original execution claims retained
+---
+
 # Mongo brownfield compatibility
 
 **Task:** Restore managed BSON enum representation and custom collection round trips.

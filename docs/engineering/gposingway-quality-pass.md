@@ -1,3 +1,16 @@
+---
+type: ANALYSIS
+domain: framework
+title: "Koan quality pass driven by a brownfield application"
+audience: [maintainers, ai-agents]
+status: archived
+last_updated: 2026-09-09
+framework_version: v1.0.0
+validation:
+  status: reviewed
+  scope: historical dogfeeding evidence classification; original execution claims retained
+---
+
 # Koan quality pass driven by a brownfield application
 
 The maintainer has authorized a broad quality pass while upgrading Gposingway. Keep both repositories' remote

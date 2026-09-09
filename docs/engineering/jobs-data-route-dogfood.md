@@ -1,3 +1,16 @@
+---
+type: ANALYSIS
+domain: framework
+title: "Durable work addresses and central scheduling"
+audience: [maintainers, ai-agents]
+status: archived
+last_updated: 2026-09-09
+framework_version: v1.0.0
+validation:
+  status: reviewed
+  scope: historical dogfeeding evidence classification; original execution claims retained
+---
+
 # Durable work addresses and central scheduling
 
 **Task:** Run locale-originated Gposingway media jobs after restoring production data.
