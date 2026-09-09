@@ -23,6 +23,8 @@ internal static class AccessGateRegistrar
             try
             {
                 AccessGateCache.Compile(type);
+                foreach (var property in type.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
+                    AccessGateCache.Compile(property);
             }
             catch (AccessGateException ex)
             {
@@ -58,8 +60,11 @@ internal static class AccessGateRegistrar
 
             foreach (var type in types)
             {
-                if (type is null || !type.IsClass || type.IsAbstract || type.IsGenericTypeDefinition) continue;
-                if (type.GetCustomAttribute<AccessAttribute>(inherit: true) is not null) yield return type;
+                if (type is null || type.IsGenericTypeDefinition) continue;
+                if (type.GetCustomAttribute<AccessAttribute>(inherit: true) is not null
+                    || type.GetProperties(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+                        .Any(property => property.GetCustomAttribute<AccessAttribute>(inherit: true) is not null))
+                    yield return type;
             }
         }
     }

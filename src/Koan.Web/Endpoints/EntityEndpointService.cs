@@ -114,6 +114,58 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     private static EntityEndpointResult Denied(EntityRequestContext context, AuthorizeDecision decision)
         => new(context, payload: null, shortCircuit: decision);
 
+    private static async Task<IActionResult?> AdmitFields(EntityRequestContext context, Action<FieldAccess> inspect)
+    {
+        try
+        {
+            var fields = context.FieldAccess;
+            if (fields is null)
+            {
+                fields = await FieldAccess.Prepare(typeof(TEntity), context.Services, context.User,
+                    context.CancellationToken).ConfigureAwait(false);
+                context.BindFieldAccess(fields);
+            }
+            if (!fields.IsCurrent(typeof(TEntity), context.User))
+                throw new InvalidOperationException("Field access no longer matches the entity or request principal.");
+            inspect(fields);
+            return null;
+        }
+        catch (Exception error) when (error is UnauthorizedAccessException or NotSupportedException
+            or InvalidOperationException or FilterParseException or InvalidFilterFieldException)
+        {
+            context.Headers.Clear();
+            context.Items.Remove(AccessProjection.ManifestKey);
+            return new ObjectResult(new
+            {
+                code = error is UnauthorizedAccessException ? KoanWebConstants.Codes.FieldAccess.Denied
+                    : KoanWebConstants.Codes.FieldAccess.Unsupported,
+                error = error.Message
+            }) { StatusCode = error is UnauthorizedAccessException ? StatusCodes.Status403Forbidden : StatusCodes.Status400BadRequest };
+        }
+    }
+
+    private static Task<IActionResult?> AdmitFieldOutput(EntityRequestContext context, object? payload)
+        => AdmitFields(context, fields =>
+        {
+            if (!fields.HasRestrictions) return;
+            var value = payload switch
+            {
+                ObjectResult result => result.Value,
+                JsonResult result => result.Value,
+                _ => payload
+            };
+            if (value is string or Newtonsoft.Json.Linq.JToken or byte[]
+                || value is IActionResult and not StatusCodeResult)
+                throw new NotSupportedException("Conditional entity fields require a typed output. Return the entity or a typed view instead of a raw or pre-serialized replacement.");
+        });
+
+    private static void AdmitCallerQuery(FieldAccess fields, string? filterJson, QueryOptions options)
+    {
+        if (!string.IsNullOrWhiteSpace(filterJson)) fields.DemandFilter(JsonFilterParser.Parse<TEntity>(filterJson));
+        foreach (var sort in options.Sort) fields.DemandReadPath(sort.Path.DotPath);
+        fields.DemandShape(options.Shape);
+    }
+
     // SEC-0004 (§B): the per-request EntityAccess<TEntity> realization (null = no Constrain → byte-identical to
     // today). Resolved + principal-bound once, memoized on the context. Reads ride the open-generic
     // IRequestOptionsHook; these write/delete paths (which never call BuildOptions) resolve it directly.
@@ -217,6 +269,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         if (request.With is not null)
             context.Options.IncludeRelationships = request.With.Contains("all", StringComparison.OrdinalIgnoreCase);
         if (await Gate(context, EntityAuthorizeActions.Read).ConfigureAwait(false) is { } denied) return CollectionDenied(context, denied);
+        if (await AdmitFields(context, fields => AdmitCallerQuery(fields, request.FilterJson, context.Options)) is { } fieldDenied)
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, fieldDenied);
         await AnnotateAccess(context).ConfigureAwait(false);
         var repo = _dataService.GetRepository<TEntity, TKey>();
         context.Capabilities = Capabilities(repo);
@@ -225,7 +279,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         if (!await _hookPipeline.BuildOptions(hookContext, context.Options))
         {
-            return CollectionShortCircuit(context, hookContext);
+            return await CollectionShortCircuit(context, hookContext);
         }
 
         QueryDefinition query;
@@ -245,7 +299,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         if (!await _hookPipeline.BeforeCollection(hookContext, context.Options))
         {
-            return CollectionShortCircuit(context, hookContext, proof is not null);
+            return await CollectionShortCircuit(context, hookContext, proof is not null);
         }
         if (proof is not null && !proof.IsRequestUnchanged(context))
             return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
@@ -324,7 +378,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         if (!await _hookPipeline.AfterCollection(hookContext, list))
         {
-            return CollectionShortCircuit(context, hookContext, proof is not null);
+            return await CollectionShortCircuit(context, hookContext, proof is not null);
         }
         if (proof is not null && !proof.IsValid(context, list))
             return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
@@ -333,7 +387,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         var relationshipEvidence = new List<Func<bool>>();
         var projectionSourcesUnchanged = CaptureProjectionSources(context, query, list, proof);
         var emit = await _hookPipeline.EmitCollection(hookContext, list);
-        if (hookContext.IsShortCircuited) return CollectionShortCircuit(context, hookContext, proof is not null);
+        if (hookContext.IsShortCircuited) return await CollectionShortCircuit(context, hookContext, proof is not null);
         if (emit.payload is EmitDecision.DeferredProjection projection)
         {
             if (!ProjectionKeySupported())
@@ -382,8 +436,13 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         }
         else if (!emit.replaced && !string.IsNullOrWhiteSpace(shape))
         {
+            if (await AdmitFields(context, fields => fields.DemandShape(shape)) is { } shapeDenied)
+                return new EntityCollectionResult<TEntity>(context, [], 0, null, shapeDenied);
             payload = ApplyShape(shape, list);
         }
+
+        if (await AdmitFieldOutput(context, payload) is { } fieldOutputDenied)
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, fieldOutputDenied);
 
         ApplyViewHeader(context, request.Accept);
 
@@ -395,7 +454,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         if (ShouldProject(context, request.IncludeAccess, out var wrapAccess))
         {
             var manifest = await BuildAccessManifest(context, list, frozenReadFilter, proof).ConfigureAwait(false);
-            if (wrapAccess) payload = new { items = payload, access = manifest };
+            if (wrapAccess) payload = AccessProjection.Wrap(payload, manifest);
         }
 
         if ((proof is not null && !proof.IsValid(context, list))
@@ -409,6 +468,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     {
         var context = request.Context;
         if (await Gate(context, EntityAuthorizeActions.Read).ConfigureAwait(false) is { } denied) return CollectionDenied(context, denied);
+        if (await AdmitFields(context, fields => AdmitCallerQuery(fields, request.FilterJson, context.Options)) is { } fieldDenied)
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, fieldDenied);
         await AnnotateAccess(context).ConfigureAwait(false);
         var repo = _dataService.GetRepository<TEntity, TKey>();
         context.Capabilities = Capabilities(repo);
@@ -417,7 +478,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         if (!await _hookPipeline.BuildOptions(hookContext, context.Options))
         {
-            return CollectionShortCircuit(context, hookContext);
+            return await CollectionShortCircuit(context, hookContext);
         }
 
         QueryDefinition query;
@@ -437,7 +498,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         if (!await _hookPipeline.BeforeCollection(hookContext, context.Options))
         {
-            return CollectionShortCircuit(context, hookContext, proof is not null);
+            return await CollectionShortCircuit(context, hookContext, proof is not null);
         }
         if (proof is not null && !proof.IsRequestUnchanged(context))
             return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
@@ -469,7 +530,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         if (!await _hookPipeline.AfterCollection(hookContext, list))
         {
-            return CollectionShortCircuit(context, hookContext, proof is not null);
+            return await CollectionShortCircuit(context, hookContext, proof is not null);
         }
         if (proof is not null && !proof.IsValid(context, list))
             return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
@@ -478,7 +539,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         var projectionSourcesUnchanged = CaptureProjectionSources(context, query, list, proof);
         var emit = await _hookPipeline.EmitCollection(hookContext, list);
-        if (hookContext.IsShortCircuited) return CollectionShortCircuit(context, hookContext, proof is not null);
+        if (hookContext.IsShortCircuited) return await CollectionShortCircuit(context, hookContext, proof is not null);
         object payload = emit.replaced ? emit.payload : list;
         if (emit.payload is EmitDecision.DeferredProjection projection)
         {
@@ -514,6 +575,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         if ((proof is not null && !proof.IsValid(context, list))
             || (emit.payload is EmitDecision.DeferredProjection && !projectionSourcesUnchanged()))
             return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
+        if (await AdmitFieldOutput(context, payload) is { } finalFieldOutputDenied)
+            return new EntityCollectionResult<TEntity>(context, [], 0, null, finalFieldOutputDenied);
         return new EntityCollectionResult<TEntity>(context, list, total, payload);
     }
 
@@ -527,7 +590,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         var hookContext = _hookPipeline.CreateContext(context);
         if (!await _hookPipeline.BuildOptions(hookContext, context.Options))
-            return ModelShortCircuit(context, hookContext);
+            return await ModelShortCircuit(context, hookContext);
         if (Filter.HasCounterpart(context.Options.Filter))
             return new EntityModelResult<TEntity>(context, null, null, new BadRequestObjectResult(new
             {
@@ -536,13 +599,15 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         var model = Activator.CreateInstance<TEntity>();
         if (!await _hookPipeline.AfterModelFetch(hookContext, model))
-            return ModelShortCircuit(context, hookContext);
+            return await ModelShortCircuit(context, hookContext);
 
         ApplyViewHeader(context, request.Accept);
 
         var emit = await _hookPipeline.EmitModel(hookContext, model!);
-        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext);
+        if (hookContext.IsShortCircuited) return await ModelShortCircuit(context, hookContext);
         var payload = emit.replaced ? emit.payload : model;
+        if (await AdmitFieldOutput(context, payload) is { } fieldOutputDenied)
+            return new EntityModelResult<TEntity>(context, null, null, fieldOutputDenied);
         CopyHookHeaders(context, hookContext);
 
         return new EntityModelResult<TEntity>(context, model, payload);
@@ -563,7 +628,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         // The same normalized read constraint reaches keyed and collection reads.
         if (!await _hookPipeline.BuildOptions(hookContext, context.Options))
         {
-            return ModelShortCircuit(context, hookContext);
+            return await ModelShortCircuit(context, hookContext);
         }
 
         context.Options.Filter = Filter.Snapshot(context.Options.Filter);
@@ -575,7 +640,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         if (!await _hookPipeline.BeforeModelFetch(hookContext, request.Id?.ToString() ?? ""))
         {
-            return ModelShortCircuit(context, hookContext, proof is not null);
+            return await ModelShortCircuit(context, hookContext, proof is not null);
         }
         if (proof is not null && !proof.IsRequestUnchanged(context))
             return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
@@ -602,7 +667,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             }
         }
         if (!await _hookPipeline.AfterModelFetch(hookContext, model))
-            return ModelShortCircuit(context, hookContext, proof is not null);
+            return await ModelShortCircuit(context, hookContext, proof is not null);
         if (proof is not null && !proof.IsValid(context, model is null ? [] : [model]))
             return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
         if (model is null || (proof is null && !PassesRequestPredicates(model, frozenReadFilter)))
@@ -650,10 +715,12 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
 
         ApplyViewHeader(context, request.Accept);
         var emit = await _hookPipeline.EmitModel(hookContext, model);
-        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext, proof is not null);
+        if (hookContext.IsShortCircuited) return await ModelShortCircuit(context, hookContext, proof is not null);
         if (proof is not null && emit.replaced)
             return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
         var payload = emit.replaced ? emit.payload : model;
+        if (await AdmitFieldOutput(context, payload) is { } fieldOutputDenied)
+            return new EntityModelResult<TEntity>(context, null, null, fieldOutputDenied);
         CopyHookHeaders(context, hookContext);
         if (proof is not null && !proof.IsValid(context, [model]))
             return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
@@ -664,6 +731,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     {
         var context = request.Context;
         if (await Gate(context, EntityAuthorizeActions.Write).ConfigureAwait(false) is { } denied) return ModelDenied(context, denied);
+        if (await AdmitFields(context, fields => fields.DemandReplacement()) is { } fieldDenied)
+            return new EntityModelResult<TEntity>(context, null, null, fieldDenied);
         await AnnotateAccess(context).ConfigureAwait(false);
         using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
         var repo = _dataService.GetRepository<TEntity, TKey>();
@@ -730,7 +799,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
             return new EntityModelResult<TEntity>(context, null, null, InsertUnsupported());
 
         if (!await _hookPipeline.BeforeSave(hookContext, request.Model))
-            return ModelShortCircuit(context, hookContext);
+            return await ModelShortCircuit(context, hookContext);
 
         if (request.DryRun)
         {
@@ -754,12 +823,14 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         await AuditMutation(context, EntityAuthorizeActions.Write, saved.Id?.ToString() ?? "").ConfigureAwait(false);
 
         if (!await _hookPipeline.AfterSave(hookContext, saved))
-            return ModelShortCircuit(context, hookContext);
+            return await ModelShortCircuit(context, hookContext);
 
         ApplyViewHeader(context, request.Accept);
         var emit = await _hookPipeline.EmitModel(hookContext, saved);
-        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext);
+        if (hookContext.IsShortCircuited) return await ModelShortCircuit(context, hookContext);
         var payload = emit.replaced ? emit.payload : saved;
+        if (await AdmitFieldOutput(context, payload) is { } fieldOutputDenied)
+            return new EntityModelResult<TEntity>(context, null, null, fieldOutputDenied);
         CopyHookHeaders(context, hookContext);
         return new EntityModelResult<TEntity>(context, saved, payload);
     }
@@ -768,6 +839,8 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     {
         var context = request.Context;
         if (await Gate(context, EntityAuthorizeActions.Write).ConfigureAwait(false) is { } denied) return Denied(context, denied);
+        if (await AdmitFields(context, fields => fields.DemandReplacement()) is { } fieldDenied)
+            return new EntityEndpointResult(context, null, fieldDenied);
         await AnnotateAccess(context).ConfigureAwait(false);
         var repo = _dataService.GetRepository<TEntity, TKey>();
         context.Capabilities = Capabilities(repo);
@@ -825,7 +898,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         foreach (var model in list)
         {
             if (!await _hookPipeline.BeforeSave(hookContext, model))
-                return ModelShortCircuit(context, hookContext);
+                return await ModelShortCircuit(context, hookContext);
         }
 
         if (request.DryRun)
@@ -845,7 +918,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         foreach (var model in list)
         {
             if (!await _hookPipeline.AfterSave(hookContext, model))
-                return ModelShortCircuit(context, hookContext);
+                return await ModelShortCircuit(context, hookContext);
         }
 
         context.Headers["Koan-Write-Capabilities"] = WriteCapabilitiesHeader(repo);
@@ -879,7 +952,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         }
 
         if (!await _hookPipeline.BeforeDelete(hookContext, model))
-            return ModelShortCircuit(context, hookContext);
+            return await ModelShortCircuit(context, hookContext);
 
         if (WantsDelta(context, request.DryRun))
         {
@@ -903,12 +976,14 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         }
         await AuditMutation(context, EntityAuthorizeActions.Remove, request.Id?.ToString() ?? "").ConfigureAwait(false);
         if (!await _hookPipeline.AfterDelete(hookContext, model))
-            return ModelShortCircuit(context, hookContext);
+            return await ModelShortCircuit(context, hookContext);
 
         ApplyViewHeader(context, request.Accept);
         var emit = await _hookPipeline.EmitModel(hookContext, model);
-        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext);
+        if (hookContext.IsShortCircuited) return await ModelShortCircuit(context, hookContext);
         var payload = emit.replaced ? emit.payload : model;
+        if (await AdmitFieldOutput(context, payload) is { } fieldOutputDenied)
+            return new EntityModelResult<TEntity>(context, null, null, fieldOutputDenied);
         CopyHookHeaders(context, hookContext);
         return new EntityModelResult<TEntity>(context, model, payload);
     }
@@ -974,6 +1049,9 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         {
             return new EntityEndpointResult(request.Context, null, new BadRequestObjectResult(new { error = ex.Message }));
         }
+
+        if (await AdmitFields(request.Context, fields => fields.DemandFilter(filter)) is { } fieldDenied)
+            return new EntityEndpointResult(request.Context, null, fieldDenied);
 
         var accessor = ResolveAccessor(request.Context);
         if (accessor is not null)
@@ -1050,6 +1128,14 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     {
         var context = request.Context;
         if (await Gate(context, EntityAuthorizeActions.Write).ConfigureAwait(false) is { } denied) return ModelDenied(context, denied);
+        if (await AdmitFields(context, fields =>
+        {
+            if (request.Patch is JsonPatchDocument<TEntity> document)
+                fields.DemandPatch(document.Operations.Select(operation => new PatchOp(operation.op, operation.path, operation.from, null)));
+            else if (request.Patch is Newtonsoft.Json.Linq.JToken token)
+                fields.DemandReplacement();
+            else throw new NotSupportedException("Field access requires a supported typed patch document.");
+        }) is { } fieldDenied) return new EntityModelResult<TEntity>(context, null, null, fieldDenied);
         await AnnotateAccess(context).ConfigureAwait(false);
         var repo = _dataService.GetRepository<TEntity, TKey>();
         context.Capabilities = Capabilities(repo);
@@ -1059,7 +1145,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         var constrain = accessor is null ? null : ConstrainFor(accessor, AccessAction.Update);
 
         if (!await _hookPipeline.BeforePatch(hookContext, request.Id?.ToString() ?? "", request.Patch!))
-            return ModelShortCircuit(context, hookContext);
+            return await ModelShortCircuit(context, hookContext);
 
         using var _ = EntityContext.With(partition: string.IsNullOrWhiteSpace(request.Set) ? null : request.Set);
         var original = await Data<TEntity, TKey>.Get(request.Id!, context.CancellationToken);
@@ -1121,7 +1207,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         constrain?.ApplyStamps(working!); // freeze ownership (re-stamp owner to principal) before save
 
         if (!await _hookPipeline.BeforeSave(hookContext, working!))
-            return ModelShortCircuit(context, hookContext);
+            return await ModelShortCircuit(context, hookContext);
 
         if (WantsDelta(context, request.DryRun))
         {
@@ -1142,12 +1228,14 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         var saved = await working!.Upsert<TEntity, TKey>(context.CancellationToken);
         await AuditMutation(context, EntityAuthorizeActions.Write, request.Id?.ToString() ?? "").ConfigureAwait(false);
         if (!await _hookPipeline.AfterPatch(hookContext, saved))
-            return ModelShortCircuit(context, hookContext);
+            return await ModelShortCircuit(context, hookContext);
 
         ApplyViewHeader(context, request.Accept);
         var emit = await _hookPipeline.EmitModel(hookContext, saved);
-        if (hookContext.IsShortCircuited) return ModelShortCircuit(context, hookContext);
+        if (hookContext.IsShortCircuited) return await ModelShortCircuit(context, hookContext);
         var payload = emit.replaced ? emit.payload : saved;
+        if (await AdmitFieldOutput(context, payload) is { } fieldOutputDenied)
+            return new EntityModelResult<TEntity>(context, null, null, fieldOutputDenied);
         CopyHookHeaders(context, hookContext);
         return new EntityModelResult<TEntity>(context, saved, payload);
     }
@@ -1318,12 +1406,12 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     // WEB-0068 / AN-leak: collection ?with=all expands each row's relationships through the SAME governed
     // path as the keyed read — every related entity is gated by its own type's visibility predicates.
     // Scope the partition explicitly: the QueryCollection partition scope has already disposed by here.
-    private static async Task<IReadOnlyList<object>> EnrichRelationships(IReadOnlyList<TEntity> list, EntityRequestContext context, string? set,
+    private static async Task<object> EnrichRelationships(IReadOnlyList<TEntity> list, EntityRequestContext context, string? set,
         ICollection<Func<bool>> retainedEvidence)
     {
         using var _ = EntityContext.With(partition: set);
-        if (list.Count == 0) return Array.Empty<object>();
-        if (list.Any(item => item is not Entity<TEntity, TKey>)) return list.Cast<object>().ToArray();
+        if (list.Count == 0) return Array.Empty<RelationshipGraph<TEntity>>();
+        if (list.Any(item => item is not Entity<TEntity, TKey>)) return list;
         var roots = list.Select(item => (item, item.Id)).ToArray();
         var checks = new List<Func<bool>>();
         var enriched = await GovernedRelationshipExpander.ExpandManyAsync<TEntity, TKey>(roots, context, checks);
@@ -1333,7 +1421,7 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
                 using var partition = EntityContext.With(partition: set);
                 return check();
             });
-        return enriched.Cast<object>().ToArray();
+        return enriched;
     }
 
     private static ObjectResult RelationshipRejectedResult(RelationshipQueryRejectedException exception)
@@ -1450,14 +1538,21 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         return null;
     }
 
-    private static EntityCollectionResult<TEntity> CollectionShortCircuit(EntityRequestContext context, HookContext<TEntity> hookContext, bool requiresProof = false)
+    private static async Task<EntityCollectionResult<TEntity>> CollectionShortCircuit(EntityRequestContext context, HookContext<TEntity> hookContext, bool requiresProof = false)
     {
         CopyHookHeaders(context, hookContext);
         var shortCircuit = hookContext.ShortCircuitPayload;
         if ((requiresProof || Filter.HasCounterpart(context.Options.Filter)) && !IsDenial(shortCircuit))
             return new EntityCollectionResult<TEntity>(context, [], 0, null, ReadEvidenceChanged(context));
+        if (requiresProof || Filter.HasCounterpart(context.Options.Filter))
+        {
+            context.Items.Remove(AccessProjection.ManifestKey);
+            context.Headers.Clear();
+        }
         if ((requiresProof || Filter.HasCounterpart(context.Options.Filter)) && shortCircuit is ObjectResult { StatusCode: >= 400 } denial)
             shortCircuit = new StatusCodeResult(denial.StatusCode.Value);
+        if (await AdmitFieldOutput(context, shortCircuit) is { } fieldOutputDenied)
+            shortCircuit = fieldOutputDenied;
         if (shortCircuit is IActionResult action)
         {
             return new EntityCollectionResult<TEntity>(context, [], 0, null, action);
@@ -1465,14 +1560,21 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
         return new EntityCollectionResult<TEntity>(context, [], 0, shortCircuit, shortCircuit);
     }
 
-    private static EntityModelResult<TEntity> ModelShortCircuit(EntityRequestContext context, HookContext<TEntity> hookContext, bool requiresProof = false)
+    private static async Task<EntityModelResult<TEntity>> ModelShortCircuit(EntityRequestContext context, HookContext<TEntity> hookContext, bool requiresProof = false)
     {
         CopyHookHeaders(context, hookContext);
         var shortCircuit = hookContext.ShortCircuitPayload;
         if ((requiresProof || Filter.HasCounterpart(context.Options.Filter)) && !IsDenial(shortCircuit))
             return new EntityModelResult<TEntity>(context, null, null, ReadEvidenceChanged(context));
+        if (requiresProof || Filter.HasCounterpart(context.Options.Filter))
+        {
+            context.Items.Remove(AccessProjection.ManifestKey);
+            context.Headers.Clear();
+        }
         if ((requiresProof || Filter.HasCounterpart(context.Options.Filter)) && shortCircuit is ObjectResult { StatusCode: >= 400 } denial)
             shortCircuit = new StatusCodeResult(denial.StatusCode.Value);
+        if (await AdmitFieldOutput(context, shortCircuit) is { } fieldOutputDenied)
+            shortCircuit = fieldOutputDenied;
         if (shortCircuit is IActionResult action)
         {
             return new EntityModelResult<TEntity>(context, default, null, action);

@@ -6,7 +6,11 @@ using System.Reflection;
 using Newtonsoft.Json.Linq;
 using System.Security.Claims;
 using System.Threading;
+using System.Threading.Tasks;
+using Koan.Data.Abstractions.Filtering;
+using Koan.Data.Abstractions.Instructions;
 using Koan.Mcp;
+using Koan.Web.Authorization;
 using Koan.Web.Attributes;
 using Koan.Web.Endpoints;
 using Koan.Web.Hooks;
@@ -21,11 +25,11 @@ namespace Koan.Mcp.Execution;
 
 public sealed class RequestTranslator
 {
-    public RequestTranslation Translate(
+    public async Task<RequestTranslation> Translate(
         IServiceProvider services,
         McpEntityRegistration registration,
         McpToolDefinition tool,
-    JObject? arguments,
+        JObject? arguments,
         CancellationToken cancellationToken,
         ClaimsPrincipal? user = null)
     {
@@ -33,9 +37,16 @@ public sealed class RequestTranslator
         if (registration is null) throw new ArgumentNullException(nameof(registration));
         if (tool is null) throw new ArgumentNullException(nameof(tool));
 
-    var args = arguments ?? new JObject();
+        var args = arguments ?? new JObject();
         var builder = services.GetRequiredService<EntityRequestContextBuilder>();
         var context = BuildContext(builder, registration.EntityType, args, cancellationToken, user);
+        var fields = await McpJson.Prepare(registration.EntityType, context.Services, context.User, cancellationToken).ConfigureAwait(false);
+        context.BindFieldAccess(fields);
+        foreach (var sort in context.Options.Sort) fields.DemandReadPath(sort.Path.DotPath);
+        if (tool.Operation is EntityEndpointOperationKind.Collection or EntityEndpointOperationKind.Query)
+            fields.DemandFilter(JsonFilterParser.Parse(registration.EntityType, ReadString(args, "filter")));
+        if (tool.Operation == EntityEndpointOperationKind.DeleteByQuery)
+            fields.DemandFilter(JsonFilterParser.Parse(registration.EntityType, ReadString(args, "query")));
 
         return tool.Operation switch
         {
@@ -57,10 +68,10 @@ public sealed class RequestTranslator
                 BuildGetByIdRequest(registration, context, args)),
             EntityEndpointOperationKind.Upsert => new RequestTranslation(
                 nameof(IEntityEndpointService<object, object>.Upsert),
-                BuildUpsertRequest(registration, context, args)),
+                BuildUpsertRequest(registration, context, args, fields)),
             EntityEndpointOperationKind.UpsertMany => new RequestTranslation(
                 nameof(IEntityEndpointService<object, object>.UpsertMany),
-                BuildUpsertManyRequest(registration, context, args)),
+                BuildUpsertManyRequest(registration, context, args, fields)),
             EntityEndpointOperationKind.Delete => new RequestTranslation(
                 nameof(IEntityEndpointService<object, object>.Delete),
                 BuildDeleteRequest(registration, context, args)),
@@ -80,7 +91,7 @@ public sealed class RequestTranslator
                 }),
             EntityEndpointOperationKind.Patch => new RequestTranslation(
                 nameof(IEntityEndpointService<object, object>.Patch),
-                BuildPatchRequest(registration, context, args)),
+                BuildPatchRequest(registration, context, args, fields)),
             _ => throw new JsonException($"Operation '{tool.Operation}' is not supported.")
         };
     }
@@ -135,26 +146,28 @@ public sealed class RequestTranslator
         return request;
     }
 
-    private object BuildUpsertRequest(McpEntityRegistration registration, EntityRequestContext context, JObject args)
+    private object BuildUpsertRequest(McpEntityRegistration registration, EntityRequestContext context, JObject args, FieldAccess fields)
     {
         var requestType = typeof(EntityUpsertRequest<,>).MakeGenericType(registration.EntityType, registration.KeyType);
         var request = Activator.CreateInstance(requestType)!;
         SetProperty(request, nameof(EntityUpsertRequest<object, object>.Context), context);
         var modelNode = TryGet(args, "model") ?? throw new JsonException("Missing required 'model' payload.");
-        SetProperty(request, nameof(EntityUpsertRequest<object, object>.Model), ConvertEntity(modelNode, registration.EntityType));
+        fields.DemandReplacement();
+        SetProperty(request, nameof(EntityUpsertRequest<object, object>.Model), ConvertEntity(modelNode, registration.EntityType, fields));
         SetProperty(request, nameof(EntityUpsertRequest<object, object>.Set), ReadString(args, "set"));
         SetProperty(request, nameof(EntityUpsertRequest<object, object>.Accept), ReadString(args, "accept"));
         SetProperty(request, nameof(EntityUpsertRequest<object, object>.DryRun), ReadBool(args, McpDryRun.ArgumentName) ?? false);
         return request;
     }
 
-    private object BuildUpsertManyRequest(McpEntityRegistration registration, EntityRequestContext context, JObject args)
+    private object BuildUpsertManyRequest(McpEntityRegistration registration, EntityRequestContext context, JObject args, FieldAccess fields)
     {
         var requestType = typeof(EntityUpsertManyRequest<>).MakeGenericType(registration.EntityType);
         var request = Activator.CreateInstance(requestType)!;
         SetProperty(request, nameof(EntityUpsertManyRequest<object>.Context), context);
         var modelsNode = TryGet(args, "models") ?? throw new JsonException("Missing required 'models' payload.");
-        SetProperty(request, nameof(EntityUpsertManyRequest<object>.Models), ConvertEntityCollection(modelsNode, registration.EntityType));
+        fields.DemandReplacement();
+        SetProperty(request, nameof(EntityUpsertManyRequest<object>.Models), ConvertEntityCollection(modelsNode, registration.EntityType, fields));
         SetProperty(request, nameof(EntityUpsertManyRequest<object>.Set), ReadString(args, "set"));
         SetProperty(request, nameof(EntityUpsertManyRequest<object>.DryRun), ReadBool(args, McpDryRun.ArgumentName) ?? false);
         return request;
@@ -202,7 +215,7 @@ public sealed class RequestTranslator
         };
     }
 
-    private object BuildPatchRequest(McpEntityRegistration registration, EntityRequestContext context, JObject args)
+    private object BuildPatchRequest(McpEntityRegistration registration, EntityRequestContext context, JObject args, FieldAccess fields)
     {
         var requestType = typeof(EntityPatchRequest<,>).MakeGenericType(registration.EntityType, registration.KeyType);
         var request = Activator.CreateInstance(requestType)!;
@@ -210,7 +223,8 @@ public sealed class RequestTranslator
         var idNode = TryGet(args, "id") ?? throw new JsonException("Missing required 'id' parameter.");
         SetProperty(request, nameof(EntityPatchRequest<object, object>.Id), ConvertValue(idNode, registration.KeyType));
         var patchNode = TryGet(args, "patch") ?? throw new JsonException("Missing required 'patch' payload.");
-        RejectInputExcludedPatchTargets(patchNode, registration.EntityType);
+        if (patchNode is not JArray) throw new JsonException("Expected a JSON Patch operations array.");
+        fields.DemandPatch(patchNode.ToObject<PatchOp[]>() ?? throw new JsonException("Unable to read JSON Patch operations."));
         SetProperty(request, nameof(EntityPatchRequest<object, object>.Patch), ConvertPatchDocument(patchNode, registration.EntityType));
         SetProperty(request, nameof(EntityPatchRequest<object, object>.Set), ReadString(args, "set"));
         SetProperty(request, nameof(EntityPatchRequest<object, object>.Accept), ReadString(args, "accept"));
@@ -362,16 +376,16 @@ public sealed class RequestTranslator
         catch (Exception ex) { throw new JsonException($"Unable to convert value to {targetType.Name}: {ex.Message}"); }
     }
 
-    private static object ConvertEntity(JToken node, Type entityType)
+    private static object ConvertEntity(JToken node, Type entityType, FieldAccess fields)
     {
-        try { return node.ToObject(entityType, McpJson.CreateApplicationSerializer()) ?? throw new JsonException($"Unable to deserialize payload as {entityType.Name}."); }
+        try { return node.ToObject(entityType, McpJson.CreateApplicationSerializer(fields)) ?? throw new JsonException($"Unable to deserialize payload as {entityType.Name}."); }
         catch (Exception ex) { throw new JsonException($"Unable to deserialize payload as {entityType.Name}: {ex.Message}"); }
     }
 
-    private static object ConvertEntityCollection(JToken node, Type entityType)
+    private static object ConvertEntityCollection(JToken node, Type entityType, FieldAccess fields)
     {
         var listType = typeof(List<>).MakeGenericType(entityType);
-        try { return node.ToObject(listType, McpJson.CreateApplicationSerializer()) ?? throw new JsonException($"Unable to deserialize collection payload as {entityType.Name} list."); }
+        try { return node.ToObject(listType, McpJson.CreateApplicationSerializer(fields)) ?? throw new JsonException($"Unable to deserialize collection payload as {entityType.Name} list."); }
         catch (Exception ex) { throw new JsonException($"Unable to deserialize collection payload as {entityType.Name} list: {ex.Message}"); }
     }
 
@@ -395,38 +409,6 @@ public sealed class RequestTranslator
         }
 
         return list;
-    }
-
-    private static void RejectInputExcludedPatchTargets(JToken patchNode, Type entityType)
-    {
-        if (patchNode is not JArray operations) return;
-
-        foreach (var operation in operations)
-        {
-            var path = operation?["path"]?.Value<string>();
-            if (string.IsNullOrWhiteSpace(path)) continue;
-
-            // JSON Pointer: "/segment/..." — only the first segment maps to a top-level entity property.
-            var segment = path!.TrimStart('/').Split('/')[0];
-            if (string.IsNullOrWhiteSpace(segment)) continue;
-
-            var property = FindPropertyByName(entityType, segment);
-            if (property is not null && McpFieldPolicy.IsExcludedFromInput(property))
-            {
-                throw new JsonException($"Property '{segment}' cannot be modified via MCP.");
-            }
-        }
-    }
-
-    private static PropertyInfo? FindPropertyByName(Type entityType, string name)
-    {
-        foreach (var property in entityType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-        {
-            if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase)) return property;
-            if (string.Equals(McpFieldPolicy.ResolveWireName(property), name, StringComparison.OrdinalIgnoreCase)) return property;
-        }
-
-        return null;
     }
 
     private static object ConvertPatchDocument(JToken node, Type entityType)

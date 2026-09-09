@@ -89,6 +89,23 @@ Development may be open so the first-use path remains observable.
 Tool advertisement and enforcement share the same caller-aware projection. A denied or disabled
 tool is not offered and cannot be reached by calling its name directly.
 
+Property access uses the same Web declaration for typed Entity and custom-tool contracts:
+
+```csharp
+[Access(read: "is:admin", write: "is:admin")]
+public List<string> ClaimantIds { get; set; } = [];
+```
+
+The caller's field permissions govern output, supplied input, filter/sort paths, and JSON Patch
+sources and destinations. `[McpIgnore]` remains an additional exclusion even for administrators.
+Server-owned Entity access predicates and ordinary Data operations retain their authority.
+
+Whole-entity replacement refuses when a protected field cannot be written, including when that
+field is omitted from the request. Use an admitted patch for individual writable fields. Conditional
+fields may remain in static schemas as a superset; discovery does not grant field access.
+Supplied typed custom-tool arguments are also whole values and require permission to write every
+protected member before binding, including constructor-bound members.
+
 Set `IsMutation = true` on a mutating `[McpTool]`. Its input schema advertises `dry_run`; because
 arbitrary imperative effects are not inspectable, `dry_run: true` returns a non-executing partial
 rehearsal that names that boundary. Generated Entity mutations return framework-owned prospective
@@ -116,6 +133,9 @@ produce startup warnings; add `[McpDescription]` only when richer agent guidance
   not an operating-system sandbox and exposes only the Koan SDK bindings supplied by the package.
 - Session limits, resumable stream state, and dry-run projection do not provide exactly-once effects, distributed
   session durability, or rollback for arbitrary custom-tool side effects.
+- Typed field protection does not track values copied into unannotated DTOs, prebuilt JSON, or strings.
+  Unprepared governed polymorphic values and unsupported converters refuse before a typed payload is returned.
+  Context-free Code Mode JSON conversion accepts projected JSON and refuses CLR contracts requiring field authority.
 
 ## Related packages
 

@@ -97,3 +97,48 @@ configure `EnableStreamableHttpTransport`. To retain clients using `/mcp/sse` an
 MutationDeltaProjector returns no delta for a short-circuited endpoint result, even if a before-state
 probe or operation label was prepared. This prevents rejected insert collisions from appearing as
 committed creates. Dry-run remains prospective and uses only the existing visible before state.
+
+## Conditional field access
+
+MCP consumes Web's operation-bound property `[Access]` policy. It contributes the existing
+`McpFieldPolicy` input/output exclusions as additional restrictions at preparation, so serialization
+and caller admission cannot disagree about `[McpIgnore]`. The policy has the explicit caller,
+request services, and declared input or actual typed output root. No principal-dependent decisions
+live in `McpContractResolver`, schema caches, or the tool registry.
+The public infrastructure methods `RequestTranslator.Translate` and `ResponseTranslator.Translate`
+return `Task<RequestTranslation>` and `Task<McpToolExecutionResult>` respectively. Direct adapter
+callers await them; the registered executor handles this for normal MCP dispatch.
+
+Request translation admits caller filters, sorts, delete predicates, and normalized patch operations
+before endpoint dispatch. The common Web path walker checks nested ancestors and descendants;
+`test` reads its target, `copy` reads its source and writes its destination, and `move` additionally
+writes its source. Full replacements, including bulk and dry-run requests, refuse if an omitted
+input-protected field could be cleared. There is no implicit merge of stored private fields.
+Trusted endpoint access filters are not reclassified as caller input.
+The adapter binds its effective policy once to the endpoint context. Built-in map/dict shaping
+checks its actual identity and display source members after option and emit hooks, so a hook-selected
+shape cannot copy an MCP-excluded member into an unannotated display string.
+
+Entity results, typed short-circuit payloads, and custom-tool Task/ValueTask results serialize with
+operation-local Newtonsoft contracts. Custom dispatch owns a DI scope spanning binding, invocation,
+and output. A supplied typed custom argument is a whole value: it requires replacement permission
+before deserialization, including for omitted or constructor-bound protected members. A policy
+failure does not fall through to the lenient ungoverned argument binder or invoke the tool with a
+default value. Custom imperative effects remain application-owned; typed argument admission does
+not inspect what a tool later saves.
+
+The delta projector checks effective read access before fetching a field value, serializes nested
+values through the same policy, and compares the visible JSON representations. A change confined to
+an unreadable descendant therefore cannot create a parent-field delta. Protocol metadata retains its
+existing shape; rejected calls have no mutation delta or returned data.
+
+Schemas remain structural. Conditional fields are a caller-neutral superset, while unconditional
+MCP input exclusions remain absent from input schemas. Code Mode Entity calls receive already-governed
+tool results; its context-free JSON facade cannot acquire grants and refuses Access-decorated CLR
+contracts. Unrelated JSON conversion remains supported.
+
+This protects supported typed member contracts, not arbitrary application dataflow. Copying a secret
+into an unannotated view, string, or prebuilt JToken discards its field provenance. Unknown governed
+runtime types and converters that bypass typed policy fail correctively; serialization is completed
+before a tool payload is returned. Custom-tool side effects already executed before output failure
+are not rolled back.

@@ -57,6 +57,9 @@ public abstract class EntityController<TEntity, TKey> : ControllerBase
 
     private EntityRequestContextBuilder ContextBuilder => HttpContext.RequestServices.GetRequiredService<EntityRequestContextBuilder>();
 
+    /// <summary>The collection view used only when the request omits an explicit view.</summary>
+    protected virtual string DefaultCollectionView => EndpointOptions.DefaultView;
+
     protected virtual string GetDisplay(TEntity e)
         => e?.ToString() ?? "";
 
@@ -217,6 +220,8 @@ public abstract class EntityController<TEntity, TKey> : ControllerBase
         {
             return BadRequest(new { error = ex.Message, field = ex.Field });
         }
+        if (!query.TryGetValue("view", out var requestedView) || string.IsNullOrWhiteSpace(requestedView))
+            options.View = DefaultCollectionView;
         options.Page = applyPagination ? page : 0;
         options.PageSize = applyPagination ? pageSize : 0;
 

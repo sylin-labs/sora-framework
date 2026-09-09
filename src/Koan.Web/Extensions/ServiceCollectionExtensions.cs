@@ -37,6 +37,7 @@ public static class ServiceCollectionExtensions
         {
             o.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
             o.Filters.Add(new TypeFilterAttribute(typeof(Koan.Web.Transformers.EntityOutputTransformFilter)));
+            o.Filters.Add(new TypeFilterAttribute(typeof(Serialization.FieldAccessResultFilter)) { Order = int.MaxValue });
         })
         .AddNewtonsoftJson(j =>
         {
@@ -47,6 +48,7 @@ public static class ServiceCollectionExtensions
         });
 
         services.TryAddEnumerable(ServiceDescriptor.Transient<IConfigureOptions<MvcOptions>, OptionalTransformerInputFormatterConfigurator>());
+        services.TryAddEnumerable(ServiceDescriptor.Transient<IPostConfigureOptions<MvcOptions>, Serialization.FieldAccessMvcOptions>());
         services.AddKoanOptions<WebPipelineOptions>(ConfigurationConstants.Web.Section + ":Pipeline");
         services.TryAddSingleton<IEntityEndpointDescriptorProvider, DefaultEntityEndpointDescriptorProvider>();
         services.TryAddScoped(typeof(IEntityHookPipeline<>), typeof(DefaultEntityHookPipeline<>));

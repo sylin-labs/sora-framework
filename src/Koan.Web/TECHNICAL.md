@@ -195,3 +195,73 @@ Mutation qualification uses the existing Create/Update AccessFilter predicates a
 read-only access realization leaves writes unchanged. The insertion selector does not reevaluate gates
 or reinterpret the principal; existing coarse authorization, including server grants, remains authoritative.
 Owner-gate-only row enforcement is outside this insertion correction. No opt-out or policy registry exists.
+
+## Property access admission
+
+`AccessGateCache` compiles property read/write/all using the existing parser. `remove` and row
+`owner` are rejected. The Entity floor and `FieldAccess` share the same asynchronous token-first,
+resource-grant fallback in `EntityFloorAuthorizationProvider`. Scoped `AgentGrantStore` retains its
+existing request memoization; no additional authority provider or grant cache is introduced.
+
+The editor-hidden `FieldAccess.Prepare` follows neutral Newtonsoft object, collection and dictionary
+contracts from one root type. It never visits object values. Only structural metadata is shared;
+principal decisions and serializer callbacks are operation-local. Optional pure protocol exclusions
+intersect those decisions. `RequireUnconditional` lets the existing context-free MCP resolver refuse
+a declared conditional type closure without inventing ambient authority.
+
+`FieldAccessResultFilter` runs last in ordinary MVC result-filter execution. It prepares typed
+ObjectResult/JsonResult and supplies native buffered Newtonsoft output. It preserves standard
+resolver settings, including null naming strategy and original ShouldSerialize behavior. A declared
+object/interface gap requires guarded serialization too: a custom formatter, resolver or converter
+cannot use an incomplete closure as proof of unrestricted output. Governed or unresolved contracts
+refuse unbuffered output. Fully known ordinary typed contracts retain their existing options.
+Unprepared governed runtime members refuse inside the operation resolver. Custom raw MVC results
+remain application dataflow; shared Entity emit and short-circuit know their entity type and refuse
+raw/pre-serialized replacements when conditional fields are declared.
+
+The native Newtonsoft input wrapper prepares the declared model type and demands whole-value write
+admission before binding, including omitted and constructor-bound members. Explicit Access on a JSON-ignored property remains
+in write-admission metadata while ordinary JSON ignoring stays intact. Entity replacement and
+bulk paths repeat preflight for protocol-neutral calls. JSON Patch remains partial: test reads path;
+copy reads from and writes path; move also writes from; add/replace/remove write path. Ancestors and
+declared descendants are checked through the existing Newtonsoft member/wire contract. Caller
+filter/sort and DeleteQuery admission precede trusted server Filter composition. Existing parser
+limitations still apply, including unsupported field aliases in a parser that requires CLR paths.
+Built-in map/dict checks ID and display source fields before discarding their member identity.
+
+Known member denial uses `web.fieldAccess.denied`/403. Unsupported caller intent uses
+`web.fieldAccess.unsupported`/400; native MVC body refusal is a model-state 400. A serialization
+configuration failure uses the host's exception response and emits no partial buffered value.
+These mechanisms do not guard direct persistence, arbitrary custom query code, copied unannotated
+values, custom serialization outside MVC, or a directly executed IActionResult that bypasses MVC
+filters. Static OpenAPI is a conditional superset, never a principal-dependent cached contract.
+
+A counterpart after-fetch denial preserves its status while discarding selected rows, count, page,
+access headers and manifest. This includes status-only 409 and prevents stale read metadata from
+surviving a rejected page. Count and page still do not imply a cross-command snapshot.
+
+Property decisions bind the actual containing contract type, including inherited declarations. The
+protocol prepares after EntityRequestContextBuilder establishes trusted origin, then binds its policy
+once to the context. Reuse validates root type and the captured principal identities/claims. MVC input
+and result preparation use that same builder for origin semantics. Final shape admission runs after
+BuildOptions, using the adapter's stronger exclusions when present.
+
+Partial JSON and JSON Merge Patch require whole-value write admission. JSON Patch is the supported
+selective field-edit protocol. The existing normalizer's empty-object omission and unescaped alias path
+behavior are separate Data findings, not repaired by this slice. No extra patch walker is introduced.
+
+AccessProjection's internal generic envelope retains the actual payload CLR type. Collection relationship
+responses retain RelationshipGraph<T> arrays. For that existing graph family alone, preparation obtains
+parent and child types from IRelationshipMetadata. It never examines graph values or maintains another
+registry. Existing arbitrary unannotated custom projection semantics remain application-owned.
+
+Guard qualification conservatively includes nonsealed object contracts even when the output root is
+known by value.GetType(), plus object/interface and ISerializable slots. This can reject a custom
+formatter/resolver on a plain nonsealed DTO. The explicit boundary avoids another preparation mode or
+unsafe inference about retained polymorphic values. Exact sealed, fully known unrestricted contracts
+keep their native formatter path. Native ProblemDetails converters remain usable because their nested
+values return through the guarded serializer; retained unprepared governed extension values still refuse.
+
+EntityController.DefaultCollectionView belongs only to collection initialization when the caller omits
+a nonempty view. EntitySummaryController supplies summary before shared hooks. Explicit view=full,
+keyed/model responses and their headers retain the existing full behavior.

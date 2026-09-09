@@ -43,6 +43,20 @@ public sealed class EntityRequestContext
     /// The backing provider's capabilities as the unified <see cref="CapabilitySet"/> (ARCH-0084).
     /// Populated by the endpoint from <c>DataCaps.Describe(repo)</c> — carries both query and write tokens.
     /// </summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public Koan.Web.Authorization.FieldAccess? FieldAccess { get; private set; }
+
+    /// <summary>Bind one adapter's stricter prepared field policy after the context establishes its principal.</summary>
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public void BindFieldAccess(Koan.Web.Authorization.FieldAccess fields)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        if (FieldAccess is not null || !fields.IsCurrent(fields.RootType, User))
+            throw new InvalidOperationException("Field access must bind once to the effective request principal.");
+        FieldAccess = fields;
+    }
+
+    /// <summary>The provider capabilities populated by the shared endpoint.</summary>
     public CapabilitySet Capabilities { get; set; }
 
     public IDictionary<string, string> Headers { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);

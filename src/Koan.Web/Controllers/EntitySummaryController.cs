@@ -40,6 +40,9 @@ public abstract class EntitySummaryController<TEntity, TSummary> : EntityControl
     public const string FullViewToken = "full";
 
     /// <inheritdoc />
+    protected override string DefaultCollectionView => "summary";
+
+    /// <inheritdoc />
     public override async Task<IActionResult> GetCollection(CancellationToken ct)
     {
         var result = await base.GetCollection(ct);

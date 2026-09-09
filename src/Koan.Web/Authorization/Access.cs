@@ -16,7 +16,7 @@ namespace Koan.Web.Authorization;
 /// <see cref="Access"/> static helpers (<c>Access.Anyone</c>, <c>Access.Is("admin")</c>, …) emit the identical
 /// canonical string with refactor-safe identifiers.
 /// </remarks>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = true)]
+[AttributeUsage(AttributeTargets.Class | AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
 public sealed class AccessAttribute : Attribute
 {
     public AccessAttribute(string? read = null, string? write = null, string? remove = null, string? all = null)

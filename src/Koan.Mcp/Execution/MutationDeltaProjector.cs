@@ -1,9 +1,12 @@
 using System;
 using System.Reflection;
+using System.Threading.Tasks;
+using Koan.Web.Authorization;
 using Koan.Web.Endpoints;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json.Serialization;
 
 namespace Koan.Mcp.Execution;
 
@@ -21,16 +24,16 @@ internal static class MutationDeltaProjector
 {
     // Mirrors the result serializer (honors [McpIgnore(Output)]) and renders enums as their member names so
     // a delta value matches the agent-facing wire representation of the field.
-    private static readonly JsonSerializer ValueSerializer = JsonSerializer.Create(new JsonSerializerSettings
+    private static readonly JsonSerializerSettings ValueSettings = new()
     {
         NullValueHandling = NullValueHandling.Ignore,
-        ContractResolver = McpContractResolver.Instance,
+        ContractResolver = new CamelCasePropertyNamesContractResolver(),
         Converters = { new StringEnumConverter() }
-    });
+    };
 
     /// <summary>Builds the (dryRun, delta) pair from the result's stashed mutation probe. Either may be
     /// default when the operation produced no delta (e.g. a read, or a not-found short-circuit).</summary>
-    public static (bool DryRun, JObject? Delta) Project(Type entityType, EntityEndpointResult result)
+    public static async Task<(bool DryRun, JObject? Delta)> Project(Type entityType, EntityEndpointResult result)
     {
         var items = result.Context.Items;
         var dryRun = items.TryGetValue(EntityMutationProbe.DryRunKey, out var dr) && dr is true;
@@ -50,12 +53,15 @@ internal static class MutationDeltaProjector
 
         items.TryGetValue(EntityMutationProbe.BeforeKey, out var before);
         var after = ExtractModel(result);
+        var fields = await McpJson.Prepare(entityType, result.Context.Services, result.Context.User,
+            result.Context.CancellationToken).ConfigureAwait(false);
+        var serializer = JsonSerializer.Create(fields.CreateSerializerSettings(ValueSettings));
 
         return (dryRun, new JObject
         {
             ["operation"] = operation,
             ["dryRun"] = dryRun,
-            ["changes"] = ComputeChanges(entityType, operation, before, after)
+            ["changes"] = ComputeChanges(entityType, operation, before, after, fields, serializer)
         });
     }
 
@@ -69,7 +75,8 @@ internal static class MutationDeltaProjector
         return null;
     }
 
-    private static JArray ComputeChanges(Type entityType, string operation, object? before, object? after)
+    private static JArray ComputeChanges(Type entityType, string operation, object? before, object? after,
+        FieldAccess fields, JsonSerializer serializer)
     {
         var changes = new JArray();
 
@@ -86,32 +93,27 @@ internal static class MutationDeltaProjector
             // The identity key is not a data transition (it is the entity's name, already in the payload).
             if (string.Equals(property.Name, "Id", StringComparison.Ordinal)) continue;
             // Walled-means-silent: an output-excluded field is absent from the delta, never redacted.
-            if (McpFieldPolicy.IsExcludedFromOutput(property)) continue;
+            if (!fields.CanRead(property)) continue;
 
             var fromVal = before is null ? null : property.GetValue(before);
             var toVal = after is null ? null : property.GetValue(after);
+            var from = ToToken(fromVal, serializer);
+            var to = ToToken(toVal, serializer);
 
             // create: surface the values being established (skip defaults — they are implied, not transitions).
-            // update: surface only fields whose value actually changed.
-            var changed = isCreate ? !IsDefault(toVal) : !ValuesEqual(fromVal, toVal);
+            // update: compare the visible representation so a hidden nested change cannot create a delta.
+            var changed = isCreate ? !IsDefault(toVal) : !JToken.DeepEquals(from, to);
             if (!changed) continue;
 
             changes.Add(new JObject
             {
                 ["field"] = McpFieldPolicy.ResolveWireName(property),
-                ["from"] = ToToken(fromVal),
-                ["to"] = ToToken(toVal)
+                ["from"] = from,
+                ["to"] = to
             });
         }
 
         return changes;
-    }
-
-    private static bool ValuesEqual(object? a, object? b)
-    {
-        if (a is null && b is null) return true;
-        if (a is null || b is null) return false;
-        return a.Equals(b);
     }
 
     private static bool IsDefault(object? v)
@@ -122,5 +124,6 @@ internal static class MutationDeltaProjector
         return t.IsValueType && v.Equals(Activator.CreateInstance(t));
     }
 
-    private static JToken ToToken(object? v) => v is null ? JValue.CreateNull() : JToken.FromObject(v, ValueSerializer);
+    private static JToken ToToken(object? v, JsonSerializer serializer)
+        => v is null ? JValue.CreateNull() : JToken.FromObject(v, serializer);
 }

@@ -198,7 +198,8 @@ public sealed class McpRpcHandler
 
             try
             {
-                var token = await _customInvoker.Invoke(customTool, parameters.Arguments, _services, user, cancellationToken);
+                await using var scope = _services.CreateAsyncScope();
+                var token = await _customInvoker.Invoke(customTool, parameters.Arguments, scope.ServiceProvider, user, cancellationToken);
                 return BuildCustomResult(token);
             }
             catch (Exception ex)

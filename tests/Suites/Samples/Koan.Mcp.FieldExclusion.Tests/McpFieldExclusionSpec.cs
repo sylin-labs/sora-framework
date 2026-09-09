@@ -59,31 +59,39 @@ public class McpFieldExclusionSpec : IClassFixture<FieldExclusionFixture>
         text.Should().Contain("codemode-public");
     }
 
-    [Fact(DisplayName = "Upsert cannot set input-excluded fields (mass-assignment guard)")]
-    public async Task Upsert_BlocksInputExcludedFields()
+    [Fact(DisplayName = "Upsert cannot overwrite omitted input-excluded fields")]
+    public async Task Upsert_RefusesReplacementWithInputExcludedFields()
     {
+        var id = await SeedViaRest("stored-public", "STORED-INTERNAL", "STORED-SERVER", "STORED-WRITEONLY");
         var model = new JObject
         {
+            ["id"] = id,
             ["name"] = "upsert-public",
-            ["internalSecret"] = "UPSERT-INTERNAL",
-            ["serverOwned"] = "UPSERT-SERVER",
             ["writeOnlyToken"] = "UPSERT-WRITEONLY"
         };
 
         var upsert = await _fx.CallToolAsync("catalog-item.upsert", new JObject { ["model"] = model });
-        var savedText = ContentText(upsert);
-        savedText.Should().NotBeNullOrEmpty();
-        var id = FindId(JToken.Parse(savedText!));
-        id.Should().NotBeNullOrWhiteSpace();
+        upsert["isError"]!.Value<bool>().Should().BeTrue();
+        ContentText(upsert).Should().Contain("replace");
 
         // Read the persisted entity via REST (REST does not apply [McpIgnore]).
         var http = _fx.CreateClient();
         var restBody = await http.GetStringAsync("/api/catalogitems/" + id);
 
-        restBody.Should().Contain("upsert-public");
-        restBody.Should().Contain("UPSERT-WRITEONLY", "[McpIgnore(Output)] does not block input");
-        restBody.Should().NotContain("UPSERT-INTERNAL", "[McpIgnore] blocks the value from being set");
-        restBody.Should().NotContain("UPSERT-SERVER", "[McpIgnore(Input)] blocks the value from being set");
+        restBody.Should().Contain("stored-public").And.Contain("STORED-INTERNAL")
+            .And.Contain("STORED-SERVER").And.Contain("STORED-WRITEONLY");
+        restBody.Should().NotContain("upsert-public").And.NotContain("UPSERT-WRITEONLY");
+
+        var patch = await _fx.CallToolAsync("catalog-item.patch", new JObject
+        {
+            ["id"] = id,
+            ["patch"] = new JArray(new JObject
+                { ["op"] = "replace", ["path"] = "/writeOnlyToken", ["value"] = "PATCH-WRITEONLY" })
+        });
+        patch["isError"]!.Value<bool>().Should().BeFalse("output exclusion still permits an admitted patch");
+        patch.ToString().Should().NotContain("PATCH-WRITEONLY");
+        (await http.GetStringAsync("/api/catalogitems/" + id)).Should().Contain("PATCH-WRITEONLY")
+            .And.Contain("STORED-INTERNAL").And.Contain("STORED-SERVER");
     }
 
     [Fact(DisplayName = "Patch targeting an input-excluded field is rejected")]
@@ -98,7 +106,9 @@ public class McpFieldExclusionSpec : IClassFixture<FieldExclusionFixture>
         var result = await _fx.CallToolAsync("catalog-item.patch", new JObject { ["id"] = id, ["patch"] = patch });
 
         result["isError"]?.Value<bool>().Should().BeTrue();
-        ContentText(result).Should().Contain("cannot be modified", "the patch guard rejects input-excluded targets");
+        ContentText(result).Should().Contain("cannot write", "the shared field policy rejects input-excluded targets");
+        var restBody = await _fx.CreateClient().GetStringAsync("/api/catalogitems/" + id);
+        restBody.Should().Contain("patch-internal").And.NotContain("tampered");
     }
 
     private async Task<string> SeedViaRest(string name, string internalSecret, string serverOwned, string writeOnlyToken)

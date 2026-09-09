@@ -18,14 +18,11 @@ Read the [charter](README.md) and [live ledger](PROGRESS.md), then
 
 ## Current corrective slice
 
-Resume [AE-08 counterpart query authority](work-items/08-counterpart-query-authority.md) on the
-existing working tree and coordinate its Data/provider/Web build ownership before running tests.
-The accepted implementation has 220 passing focused checks and independent source acceptance.
-Mechanical composer cleanup, native insertion compatibility and repository coherence are complete.
-Follow normal publication and public-package consumer validation.
-AE-07 insertion and AE-09 build-dependency corrections are committed locally; publication and
-public-package brownfield acceptance remain separate. Do not replace this work with a new ledger
-or start AE-02 while AE-08 implementation is unsettled.
+Resume [AE-10 conditional field access](work-items/10-field-access.md) on the existing working
+tree. Coordinate Web/MCP source and build ownership before testing. 132 focused checks and independent
+source review pass locally; repository coherence and normal publication remain; the card holds exact receipts and compatibility boundaries. AE-07/08/09 were
+published in release 34390309739. Brownfield public-package validation remains a separate receipt.
+Do not replace this work with a new ledger or start AE-02 while the corrective slice is unsettled.
 
 ## After the current corrective slice
 

@@ -148,3 +148,49 @@ Every invoked model hook's `ShortCircuit` result is honored. A pre-save, pre-del
 prevents persistence, including dry runs and batch pre-save validation. An after-fetch stop precedes
 relationship expansion. Post-write stops control the response without undoing the committed mutation;
 the mutation is audited before response hooks run.
+
+## Conditional properties
+
+Use the existing access declaration on a property when operators may see or write a field that
+ordinary callers cannot:
+
+```csharp
+[Access(read: "is:admin", write: "is:admin")]
+public List<string> ClaimedByUserIds { get; set; } = [];
+```
+
+The normal `AddKoan()` MVC pipeline applies the property gate to typed Entity, custom ObjectResult
+and JsonResult responses, including typed lists and dictionaries. Entity authorization still runs
+first. AgentGrants retain resource scope. MCP uses the same decisions and keeps its stronger
+`McpIgnore` exclusions. Storage and trusted server predicates remain unchanged.
+
+Caller filters, sorts, delete predicates and patch paths cannot read a denied field. Full typed
+replacement, including a custom MVC body, refuses when an omitted field could erase a protected
+value. Use JSON Patch for an ordinary editable field. Partial JSON and JSON Merge Patch documents
+require permission to write every protected member, including when a document only changes a public
+field. Property `remove` and `owner`
+have no supported meaning and fail with a corrective explanation.
+
+Known denied caller fields return 403; unknown or unsupported field intent returns 400. MVC's
+native invalid-model response returns 400 when complete typed input binding is refused. Unsupported
+typed serializer customization fails before buffered output. Static schemas remain a conditional
+superset. Explicit standard Newtonsoft casing and ordinary ShouldSerialize rules are preserved.
+
+This protects retained typed member contracts, not secrets copied by custom code into an unannotated
+DTO, JToken or string. Such application projections must own their privacy. Direct execution of an
+IActionResult outside the MVC invocation pipeline is also outside the result-filter boundary.
+
+For example, `PATCH /works/id` with `Content-Type: application/json-patch+json` and
+`[{"op":"replace","path":"/name","value":"Updated"}]` can edit an admitted field. The equivalent
+`application/json` or `application/merge-patch+json` document requires whole-value write permission.
+This initial boundary avoids ambiguous empty-object and aliased-path effects in legacy patch normalization.
+
+Typed access sidecars and relationship responses preserve member policy through their known framework
+wrappers. Inherited property gates use the actual containing resource type. An explicitly Access-declared
+JSON-ignored property still restricts replacement; JSON ignoring remains intact on output.
+
+Object/interface slots, legacy ISerializable contracts and nonsealed object contracts conservatively
+require guarded serialization, including a nonsealed root supplied by its actual runtime type. Custom
+formatters/resolvers/converters or suppressed buffering on those contracts refuse. Sealed, fully known
+unrestricted contracts retain their original native formatter path. No application override bypasses
+this boundary.

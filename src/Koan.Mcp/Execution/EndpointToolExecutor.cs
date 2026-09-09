@@ -2,6 +2,7 @@ using System;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using Koan.Data.Abstractions.Filtering;
 using Koan.Web.Endpoints;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -81,9 +82,14 @@ public sealed class EndpointToolExecutor
 
         try
         {
-            var translation = _requestTranslator.Translate(provider, registration, tool, arguments, cancellationToken, user);
+            var translation = await _requestTranslator.Translate(provider, registration, tool, arguments, cancellationToken, user);
             var endpointResult = await InvokeService(service, translation);
-            return _responseTranslator.Translate(registration, tool, endpointResult);
+            return await _responseTranslator.Translate(registration, tool, endpointResult);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or NotSupportedException
+            or FilterParseException or InvalidFilterFieldException)
+        {
+            return McpToolExecutionResult.Failure(CodeMode.Execution.CodeModeErrorCodes.InvalidPayload, ex.Message);
         }
         catch (JsonException ex)
         {

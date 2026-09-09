@@ -1,14 +1,14 @@
 using System.Reflection;
 using Koan.Mcp;
+using Koan.Web.Authorization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
 namespace Koan.Mcp.Execution;
 
 /// <summary>
-/// Newtonsoft contract resolver that honors <see cref="McpIgnoreAttribute"/>. The same instance is shared by
-/// the result serializer (<see cref="ResponseTranslator"/>) and the input deserializer
-/// (<see cref="RequestTranslator"/>):
+/// Context-free Code Mode conversion honors <see cref="McpIgnoreAttribute"/> and refuses conditional CLR
+/// contracts that require an operation principal. Entity and custom-tool execution prepare Web's field policy.
 /// <list type="bullet">
 ///   <item>output-excluded members are not readable, so they never appear in tool results (Tools or Code Mode);</item>
 ///   <item>input-excluded members are not writable, so caller payloads cannot set them (mass-assignment guard).</item>
@@ -20,6 +20,12 @@ namespace Koan.Mcp.Execution;
 internal sealed class McpContractResolver : CamelCasePropertyNamesContractResolver
 {
     public static readonly McpContractResolver Instance = new();
+
+    protected override JsonContract CreateContract(System.Type objectType)
+    {
+        FieldAccess.RequireUnconditional(objectType);
+        return base.CreateContract(objectType);
+    }
 
     protected override JsonProperty CreateProperty(MemberInfo member, MemberSerialization memberSerialization)
     {

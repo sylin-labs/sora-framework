@@ -6,10 +6,9 @@ using Newtonsoft.Json.Serialization;
 namespace Koan.Mcp;
 
 /// <summary>
-/// Central policy for per-property MCP exposure. Shared by schema generation
-/// (<see cref="Koan.Mcp.Schema.SchemaBuilder"/>) and serialization
-/// (<see cref="Koan.Mcp.Execution.McpContractResolver"/>) so exclusion and wire-name resolution
-/// stay consistent across the schema, results, and input paths.
+/// Unconditional MCP exclusions and wire names. Schema generation consumes these static facts;
+/// request-bound serialization and path admission pass the exclusions to Web's field access owner.
+/// Context-free Code Mode conversion uses the same exclusions.
 /// </summary>
 internal static class McpFieldPolicy
 {

@@ -173,6 +173,34 @@ public sealed class CounterpartEndpointSpec(MongoFixture mongo)
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task Post_selection_conflict_preserves_status_and_discards_count_page_and_access_metadata(bool query)
+    {
+        var state = new CounterpartEndpointState { Change = "conflict" };
+        using var host = await Start(state);
+        using var app = AppHost.PushScope(host.Services);
+        await Seed(state, "first", true, "First");
+        await Seed(state, "second", true, "Second");
+        using var scope = host.Services.CreateScope();
+        var context = new EntityRequestContext(scope.ServiceProvider, new QueryOptions { Page = 1, PageSize = 1 }, default);
+        context.Items[AccessProjection.RequestKey] = true;
+        var endpoint = scope.ServiceProvider.GetRequiredService<IEntityEndpointService<CounterpartPage, string>>();
+        var result = query
+            ? await endpoint.Query(new EntityQueryRequest { Context = context, Set = state.Content })
+            : await endpoint.GetCollection(new EntityCollectionRequest { Context = context, Set = state.Content, IncludeTotalCount = true,
+                Policy = Koan.Web.Attributes.PaginationPolicy.Resolve(scope.ServiceProvider, null) });
+
+        result.ShortCircuitResult.Should().BeOfType<ConflictResult>();
+        result.Items.Should().BeEmpty();
+        result.Payload.Should().BeNull();
+        result.TotalCount.Should().Be(0);
+        result.Headers.Should().BeEmpty("a rejected selected page must not report its stale total, page or capabilities");
+        context.Items.Should().NotContainKey(AccessProjection.ManifestKey);
+        await host.StopAsync();
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Typed_summary_projects_exact_native_page_once_for_rest_and_mcp(bool authenticated)
     {
         var state = new CounterpartEndpointState { Change = "project" };
@@ -600,6 +628,9 @@ internal sealed class CounterpartPageHook(CounterpartEndpointState state) : ICol
             case "fallback": context.ShortCircuit(new OkObjectResult(new CounterpartPage { Id = "unproved" })); break;
             case "erased-fallback": context.Options.Filter = null; context.ShortCircuit(new OkObjectResult(new CounterpartPage { Id = "unproved" })); break;
             case "denial": context.ShortCircuit(new ObjectResult(new CounterpartPage { Id = "unproved" }) { StatusCode = 403 }); break;
+            case "conflict":
+                context.ShortCircuit(new ConflictResult());
+                break;
         }
         return Task.CompletedTask;
     }

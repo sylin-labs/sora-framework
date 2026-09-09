@@ -31,7 +31,7 @@ public sealed class McpCustomToolInvoker
                 McpCustomToolParameterSource.CancellationToken => cancellationToken,
                 McpCustomToolParameterSource.ServiceProvider => services,
                 McpCustomToolParameterSource.Principal => principal,
-                _ => BindArgument(parameter, arguments)
+                _ => await BindArgument(parameter, arguments, services, principal, cancellationToken).ConfigureAwait(false)
             };
         }
 
@@ -63,22 +63,32 @@ public sealed class McpCustomToolInvoker
                 await valueTask.ConfigureAwait(false);
                 result = null;
                 break;
+            case { } genericValueTask when genericValueTask.GetType().IsGenericType
+                && genericValueTask.GetType().GetGenericTypeDefinition() == typeof(ValueTask<>):
+                var asTask = (Task)genericValueTask.GetType().GetMethod(nameof(ValueTask<int>.AsTask))!.Invoke(genericValueTask, null)!;
+                await asTask.ConfigureAwait(false);
+                result = GetTaskResult(asTask);
+                break;
         }
 
-        return McpJson.FromApplicationObject(result);
+        return await McpJson.FromApplicationObject(result, services, principal, cancellationToken).ConfigureAwait(false);
     }
 
-    private static object? BindArgument(McpCustomToolParameter parameter, JObject? arguments)
+    private static async Task<object?> BindArgument(McpCustomToolParameter parameter, JObject? arguments,
+        IServiceProvider services, ClaimsPrincipal? principal, CancellationToken cancellationToken)
     {
         if (arguments is not null
             && arguments.TryGetValue(parameter.Name, StringComparison.OrdinalIgnoreCase, out var node)
             && node.Type != JTokenType.Null)
         {
+            var fields = await McpJson.Prepare(parameter.Type, services, principal, cancellationToken).ConfigureAwait(false);
+            fields.DemandReplacement();
             try
             {
-                return node.ToObject(parameter.Type, McpJson.CreateApplicationSerializer());
+                return node.ToObject(parameter.Type, McpJson.CreateApplicationSerializer(fields));
             }
-            catch (Exception ex) when (ex is JsonException or FormatException or InvalidCastException or ArgumentException or OverflowException)
+            catch (Exception ex) when (!fields.HasRestrictions &&
+                (ex is JsonException or FormatException or InvalidCastException or ArgumentException or OverflowException))
             {
                 // A supplied value that cannot bind to the target type falls through to the default (lenient
                 // binding, by design). F2 burn-down: the catch is narrowed to conversion failures so an UNEXPECTED

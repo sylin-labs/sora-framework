@@ -17,6 +17,9 @@ public interface IAccessGateCache
     /// <summary>The compiled gate for <paramref name="entityType"/> (<see cref="AccessGate.Open"/> when the entity
     /// declares neither <c>[Access]</c> nor a legacy floor attribute — allow-by-default).</summary>
     AccessGate GetOrCompile(Type entityType);
+
+    /// <summary>Principal-independent read/write gates declared on a property.</summary>
+    AccessGate GetOrCompile(PropertyInfo property);
 }
 
 /// <summary>
@@ -32,6 +35,7 @@ public sealed class AccessGateCache : IAccessGateCache
         { EntityAuthorizeActions.Read, EntityAuthorizeActions.Write, EntityAuthorizeActions.Remove };
 
     private readonly ConcurrentDictionary<Type, AccessGate> _cache = new();
+    private readonly ConcurrentDictionary<PropertyInfo, AccessGate> _members = new();
     private readonly ILogger<AccessGateCache>? _logger;
     private readonly Func<Type, Type?>? _realizationFor;
 
@@ -42,6 +46,22 @@ public sealed class AccessGateCache : IAccessGateCache
     }
 
     public AccessGate GetOrCompile(Type entityType) => _cache.GetOrAdd(entityType, Compile1);
+
+    public AccessGate GetOrCompile(PropertyInfo property) => _members.GetOrAdd(property, Compile);
+
+    /// <summary>Compile a property declaration. Field removal and row ownership have no member meaning.</summary>
+    public static AccessGate Compile(PropertyInfo property)
+    {
+        var access = property.GetCustomAttribute<AccessAttribute>(inherit: true);
+        if (access is null) return AccessGate.Open;
+        var name = $"{property.DeclaringType?.Name}.{property.Name}";
+        if (access.Remove is not null)
+            throw new AccessGateException($"[Access] on {name} cannot declare remove. Use write for property assignment and patch removal.");
+        var gate = AccessGateParser.Parse(name, access.Read ?? access.All, access.Write ?? access.All, null, null);
+        if (DeclaresOwner(gate))
+            throw new AccessGateException($"[Access] on {name} cannot declare owner. Property gates use principal roles, scopes or claims.");
+        return gate;
+    }
 
     private AccessGate Compile1(Type entityType)
     {

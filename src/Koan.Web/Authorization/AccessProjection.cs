@@ -20,4 +20,10 @@ public static class AccessProjection
     /// sidecar. Mirrors the existing <c>?all=true</c> boolean toggle, and is decoupled from <c>?with=</c>
     /// relationship expansion (which is gated separately by <c>AllowRelationshipExpansion</c>).</summary>
     public const string QueryToggle = "access";
+    internal static object Wrap(object payload, Dictionary<string, object> manifest)
+        => Activator.CreateInstance(typeof(Envelope<>).MakeGenericType(payload.GetType()), payload, manifest)!;
+
+    private sealed record Envelope<T>(
+        [property: Newtonsoft.Json.JsonProperty("items")] T Items,
+        [property: Newtonsoft.Json.JsonProperty("access")] Dictionary<string, object> Access);
 }

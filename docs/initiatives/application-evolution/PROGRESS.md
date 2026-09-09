@@ -20,8 +20,8 @@ with links to the actual deliverable and evidence.
 ## Initiative state
 
 - Overall: active; shared-foundation milestone proved with published Koan dependencies.
-- Active implementation card: [AE-08 counterpart query authority](work-items/08-counterpart-query-authority.md), discovered during brownfield characterization; 220 focused checks, independent source review and repository coherence pass locally. AE-07 and AE-09 are also accepted locally; normal publication remains.
-- Next: normal publication and public-package consumer validation; AE-02/AE-03 remain planned.
+- Active implementation card: [AE-10 conditional field access](work-items/10-field-access.md); 132 focused checks and independent source review pass locally; repository coherence and normal publication remain. AE-07/08/09 were published in release 34390309739; public-package brownfield acceptance is separate.
+- Next: run AE-10 repository coherence, then normal publication and public-package consumer validation; AE-02/AE-03 remain planned.
 - Independent participants: none recruited; results and productivity measurements unavailable.
 
 ## Work ledger
@@ -38,6 +38,8 @@ with links to the actual deliverable and evidence.
 | [AE-07 Scoped insert safety](work-items/07-scoped-insert-safety.md) | in-progress | Atomic insert boundary and native provider proofs accepted locally; constrained bulk creates reject pending native mixed-write guarantees. Public-package consumer validation remains open. |
 | [AE-08 Counterpart query authority](work-items/08-counterpart-query-authority.md) | in-progress | 220 focused checks, independent source acceptance and repository coherence pass. Terminal projection, native authority, proof reductions and native insertion compatibility are verified locally; publication and public-package consumer acceptance remain open. |
 | [AE-09 Build dependency security](work-items/09-build-dependency-security.md) | in-progress | SourceLink pin selects patched Git build tasks; forced audit restore and focused build pass with zero warnings/errors. Normal package publication remains open. |
+
+| [AE-10 Conditional field access](work-items/10-field-access.md) | in-progress | One property Access owner across typed MVC/shared Entity/MCP; 132 focused checks and independent source acceptance. Normal coherence/publication and public-package adoption remain; exact receipts and limits in card. |
 
 Use `in-progress`, `blocked`, `done`, or `stopped` as execution proceeds. A blocker names the
 missing input and useful restart point; stopped work retains its findings. Front matter in

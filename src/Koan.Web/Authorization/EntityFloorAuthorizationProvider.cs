@@ -50,6 +50,13 @@ public sealed class EntityFloorAuthorizationProvider : IAuthorizationProvider
 
         // A null subject (reflection-built request / misbehaving provider) is treated as anonymous, never NRE.
         var subject = request.Subject ?? new ClaimsPrincipal(new ClaimsIdentity());
+        return await EvaluateGate(actionGate, entityType, subject, _grants, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>The shared gate/grant fallback for an entity action or an additional property restriction.</summary>
+    internal static async Task<AuthorizeDecision> EvaluateGate(ActionGate actionGate, Type entityType,
+        ClaimsPrincipal subject, IAgentGrantStore? grants, CancellationToken ct)
+    {
         // owner degrades to authenticated at the coarse gate (no row to bind).
         var ownerAtGate = subject.Identity?.IsAuthenticated == true;
         var decision = AccessGateEvaluator.Evaluate(actionGate, subject, ownerSatisfied: ownerAtGate);
@@ -63,9 +70,9 @@ public sealed class EntityFloorAuthorizationProvider : IAuthorizationProvider
         // grant composes with the bag logic / origin / Constrain, never a per-transport bypass). Anonymous = no id =
         // no grants. The common Allow path above never reaches here, so the lookup is the slow-path-only cost.
         var subjectId = AuthSubject.Id(subject);
-        if (_grants is not null && subjectId is not null)
+        if (grants is not null && subjectId is not null)
         {
-            var caps = await _grants.ActiveCapabilities(subjectId, entityType.Name, ct).ConfigureAwait(false);
+            var caps = await grants.ActiveCapabilities(subjectId, entityType.Name, ct).ConfigureAwait(false);
             if (caps.Count > 0)
             {
                 var granted = GrantClaims.Enrich(subject, caps);

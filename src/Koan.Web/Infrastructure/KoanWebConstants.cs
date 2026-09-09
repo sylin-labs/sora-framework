@@ -14,6 +14,11 @@ public static class KoanWebConstants
 
     public static class Codes
     {
+        public static class FieldAccess
+        {
+            public const string Denied = "web.fieldAccess.denied";
+            public const string Unsupported = "web.fieldAccess.unsupported";
+        }
         public static class Read
         {
             public const string EvidenceChanged = "web.read.evidenceChanged";
