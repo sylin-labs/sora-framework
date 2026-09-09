@@ -118,3 +118,10 @@ expansion no adapter can serve fails closed with `422`; a response past the safe
   provider configuration are included.
 - MCP uses `IEntityEndpointService` and therefore receives the same authorization, limits, errors, and
   runtime facts. These are direct-edge guarantees, not recursive graph-depth or parent-batching claims.
+
+## Ordered response hooks
+
+`IEmitHook<T>` runs in ascending `Order`. `EmitDecision.With(payload)` passes the replacement to
+subsequent hooks; `Next()` preserves the current payload. `HookContext.ShortCircuit(...)` stops the
+pipeline immediately and takes precedence over a returned replacement. This applies to both collection
+and model responses through the shared REST/MCP endpoint pipeline.

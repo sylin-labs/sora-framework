@@ -80,3 +80,10 @@ surface. Static-file wiring stays dormant in API-only hosts that have no real we
 - [Web API conventions](https://github.com/sylin-org/koan-framework/blob/main/docs/api/web-http-api.md)
 - [WEB-0035 — EntityController transformers](https://github.com/sylin-org/koan-framework/blob/main/docs/decisions/WEB-0035-entitycontroller-transformers.md)
 - [Engineering guardrails](https://github.com/sylin-org/koan-framework/blob/main/docs/engineering/README.md)
+
+## Ordered response hooks
+
+`IEmitHook<T>` runs in ascending `Order`. `EmitDecision.With(payload)` passes the replacement to
+subsequent hooks; `Next()` preserves the current payload. `HookContext.ShortCircuit(...)` stops the
+pipeline immediately and takes precedence over a returned replacement. This applies to both collection
+and model responses through the shared REST/MCP endpoint pipeline.

@@ -139,13 +139,18 @@ internal sealed class HookRunner<TEntity>
     /// </summary>
     public async Task<(bool replaced, object payload)> EmitCollection(HookContext<TEntity> ctx, object payload)
     {
+        var replaced = false;
         foreach (var h in _emit)
         {
-            var d = await h.OnEmitCollection(ctx, payload);
-            if (d is EmitDecision.Replace rep) return (true, rep.Payload);
-            if (ctx.IsShortCircuited) return (true, ctx.ShortCircuitResult!);
+            var decision = await h.OnEmitCollection(ctx, payload);
+            if (ctx.IsShortCircuited) return (true, ctx.ShortCircuitPayload!);
+            if (decision is EmitDecision.Replace replacement)
+            {
+                payload = replacement.Payload;
+                replaced = true;
+            }
         }
-        return (false, payload);
+        return (replaced, payload);
     }
 
     /// <summary>
@@ -153,12 +158,17 @@ internal sealed class HookRunner<TEntity>
     /// </summary>
     public async Task<(bool replaced, object payload)> EmitModel(HookContext<TEntity> ctx, object payload)
     {
+        var replaced = false;
         foreach (var h in _emit)
         {
-            var d = await h.OnEmitModel(ctx, payload);
-            if (d is EmitDecision.Replace rep) return (true, rep.Payload);
-            if (ctx.IsShortCircuited) return (true, ctx.ShortCircuitResult!);
+            var decision = await h.OnEmitModel(ctx, payload);
+            if (ctx.IsShortCircuited) return (true, ctx.ShortCircuitPayload!);
+            if (decision is EmitDecision.Replace replacement)
+            {
+                payload = replacement.Payload;
+                replaced = true;
+            }
         }
-        return (false, payload);
+        return (replaced, payload);
     }
 }

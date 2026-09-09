@@ -151,3 +151,22 @@ No package version, target framework, or release mechanism changes.
 Local dogfood packages are temporary inputs for the existing Gposingway checkout. Remote release is
 explicitly authorized but deferred until the application pass is complete. Public-package restoration
 and the normal dependency-stamping/release boundary remain required before final acceptance.
+
+## Ordered response enrichment
+
+**Task:** Preserve all ordered response hooks when an earlier hook replaces the payload.
+**Application intent:** A catalog page carries likes, collection membership and claim markers together.
+**Public expression:** Existing ordered IEmitHook<T> implementations returning EmitDecision.With.
+**Guarantee/correction:** Each replacement becomes the next hook's input. Explicit context ShortCircuit
+stops processing and wins over a simultaneous replacement. A plain short-circuit payload remains intact.
+**Complete intent surface/public concepts:** Existing hooks, order and decisions only; no new option or type.
+**Docs/code read:** Web README/TECHNICAL own response shaping across governed endpoints. HookRunner currently
+returns immediately for Replace, contrary to the app's three ordered enrichers and EmitDecision's pipeline
+contract. DefaultEntityHookPipeline shares that runner for REST and MCP. HookContext already owns stops.
+**Reuse/coalescence:** Fix the two emit loops at their existing Web owner. No application orchestration helper.
+**Verification:** Characterize chained replacement, Continue and explicit stops for collection and model emits
+in the existing Web.WellKnown friend suite, then exercise Gposingway's real endpoint enrichment.
+**Risk:** Later registered hooks previously skipped will now execute as declared. Exceptions remain visible.
+
+Web hook characterization failed all six cases before the fix. The corrected runner passes the complete
+10-test Web.WellKnown suite, including replacement propagation and explicit-stop precedence.
