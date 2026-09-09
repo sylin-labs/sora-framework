@@ -34,7 +34,9 @@ internal sealed class FieldAccessMvcOptions(IOptions<MvcNewtonsoftJsonOptions> j
                 .Build(new QueryOptions(), context.HttpContext.RequestAborted, context.HttpContext);
             var access = await FieldAccess.Prepare(context.ModelType, context.HttpContext.RequestServices,
                 effective.User, context.HttpContext.RequestAborted).ConfigureAwait(false);
-            if (!access.RequiresGuardedSerialization)
+            if (!access.RequiresGuardedSerialization
+                && (original.GetType() != typeof(NewtonsoftJsonInputFormatter)
+                    || !FieldAccess.UsesStandardResolver(json.SerializerSettings.ContractResolver)))
                 return await original.ReadAsync(context).ConfigureAwait(false);
             try
             {

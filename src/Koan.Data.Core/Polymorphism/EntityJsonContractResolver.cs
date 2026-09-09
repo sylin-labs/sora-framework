@@ -10,39 +10,8 @@ namespace Koan.Data.Core.Polymorphism;
 /// Entity-family type hint, and it makes the round trip symmetric, so state Koan persists is state Koan restores.
 /// </summary>
 [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
-public class EntityJsonContractResolver : DefaultContractResolver
+public class EntityJsonContractResolver : Koan.Core.Json.KoanJsonContractResolver
 {
-    /// <summary>Restore additive domain collections that Json.NET serializes as arrays.</summary>
-    protected override JsonArrayContract CreateArrayContract(Type objectType)
-    {
-        var contract = base.CreateArrayContract(objectType);
-        var itemType = contract.CollectionItemType;
-        if (itemType is null || objectType.IsAbstract || objectType.IsInterface
-            || contract.OverrideCreator is not null || contract.HasParameterizedCreator
-            || typeof(System.Collections.IList).IsAssignableFrom(objectType)
-            || typeof(ICollection<>).MakeGenericType(itemType).IsAssignableFrom(objectType))
-            return contract;
-        var constructor = objectType.GetConstructor(Type.EmptyTypes);
-        var add = objectType.GetMethod("Add", BindingFlags.Instance | BindingFlags.Public, [itemType]);
-        if (constructor is null || add is null) return contract;
-        var clear = objectType.GetMethod("Clear", BindingFlags.Instance | BindingFlags.Public, Type.EmptyTypes);
-        contract.OverrideCreator = arguments =>
-        {
-            var collection = constructor.Invoke(null);
-            if (((System.Collections.IEnumerable)collection).Cast<object?>().Any())
-            {
-                if (clear is null)
-                    throw new JsonSerializationException($"Collection '{objectType.FullName}' seeds constructor values but has no public Clear(). Use an empty constructor or a JSON constructor that accepts the stored values.");
-                clear.Invoke(collection, null);
-            }
-            if (arguments.Length > 0 && arguments[0] is System.Collections.IEnumerable values)
-                foreach (var value in values) add.Invoke(collection, [value]);
-            return collection;
-        };
-        contract.HasParameterizedCreator = true;
-        return contract;
-    }
-
     protected override JsonObjectContract CreateObjectContract(Type objectType)
     {
         var contract = base.CreateObjectContract(objectType);

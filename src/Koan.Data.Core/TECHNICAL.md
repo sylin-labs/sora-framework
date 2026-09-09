@@ -375,6 +375,8 @@ Existing numeric rows or columns require a separate, explicit migration; upgrade
 Entity JSON hydration replaces constructor-seeded members with stored collections. Additive domain collections
 with public parameterless constructors and Add(T) round-trip as arrays; a nonempty constructor also needs public
 Clear() so hydration cannot duplicate its defaults. Unsupported shapes fail with a corrective error.
+The array constructor is owned by Core.Json.KoanJsonContractResolver and reused by typed transport
+binding. Data retains the separate private-setter and family-discriminator overrides.
 ## Counterpart query execution
 
 RepositoryFacade binds QueryDefinition.Partition before read scope and dispatch. For counterpart

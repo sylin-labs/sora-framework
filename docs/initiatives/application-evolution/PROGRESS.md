@@ -20,8 +20,8 @@ with links to the actual deliverable and evidence.
 ## Initiative state
 
 - Overall: active; shared-foundation milestone proved with published Koan dependencies.
-- Active implementation card: [AE-12 Entity insertion](work-items/12-entity-insertion.md), 36 focused tests, independent review and all eight coherence legs pass. AE-11 and the AE-10 discovery correction are published through release 34406712072 at `6f5a6576b`; application acceptance remains separate.
-- Next: publish the reviewed AE-12 forwarding and default-partition correction, then qualify the application from public packages. Gposingway owns its runtime acceptance ledger.
+- Active increment: AE-12 insertion convenience plus AE-13 MCP enum names and AE-14 common additive collection construction. AE-12 passes 36 focused checks; AE-13/14 pass 58 MCP, 68 Web and six Data checks. Independent review accepts the source, including the custom-reader correction. All eight combined repository coherence legs pass.
+- Next: publish the reviewed increment through the normal main boundary, then qualify the application from public packages. AE-11 release 34406712072 succeeded at `6f5a6576b`; public consumer startup/privacy/BSON/header checks now pass, while four enum/body-binding failures motivate AE-13/14. Gposingway owns its runtime acceptance ledger.
 - Independent participants: none recruited; results and productivity measurements unavailable.
 
 ## Work ledger
@@ -41,6 +41,8 @@ with links to the actual deliverable and evidence.
 | [AE-10 Conditional field access](work-items/10-field-access.md) | in-progress | One property Access owner across typed MVC/shared Entity/MCP; 132 focused checks and independent source acceptance. Published through 34400186238; discovery correction published through 34406712072. Public application acceptance remains. |
 | [AE-11 Conditional publication](work-items/11-conditional-publication.md) | in-progress | Normalized Filter primitive and sole Entity ReplaceIf verb; 86 focused tests, independent review and coherence pass. Release 34406712072 published 87 packages; public application acceptance remains. |
 | [AE-12 Entity insertion](work-items/12-entity-insertion.md) | in-progress | Thin Insert forwarding and explicit-default Save consistency; 36 focused cases, independent review and coherence pass. Normal publication and application acceptance remain. |
+| [AE-13 MCP enum names](work-items/13-mcp-enum-wire.md) | in-progress | One output enum convention replaces duplicate delta settings; legacy numeric input retained. 58 focused MCP checks and independent review; normal publication and app acceptance remain. |
+| [AE-14 Additive JSON collections](work-items/14-additive-json-collections.md) | in-progress | Existing Data array construction moves to Core.Json, reused by ordinary/governed typed input and PUT. 68 Web and six Data checks, including custom reader preservation, plus independent review; publication and app acceptance remain. |
 
 Use `in-progress`, `blocked`, `done`, or `stopped` as execution proceeds. A blocker names the
 missing input and useful restart point; stopped work retains its findings. Front matter in

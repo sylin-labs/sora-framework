@@ -238,6 +238,13 @@ native shapes reject. Count and page share predicate meaning, not a transactiona
 Explicit empty partitions select default in structured reads and positional Entity Get/GetMany
 helpers; null retains the ambient partition. The caller's scope is restored after execution.
 
+## JSON collection round trips
+
+Entity JSON hydration and standard typed Web input share additive collection construction from
+Core.Json. JSON arrays reconstruct concrete collections with a public constructor and `Add(T)`;
+constructor-seeded values require `Clear()`. Persistence-only private-setter restoration and family
+discriminators remain in Data and are not enabled for request binding.
+
 ## Guarded replacement
 
 `await replacement.ReplaceIf(stored => stored.Revision == expected, partition: locale, ct: ct)`

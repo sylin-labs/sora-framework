@@ -18,6 +18,11 @@ source: src/Koan.Core/
 ## Key types
 
 - Core primitives surfaced by other modules (data, web, messaging, ai).
+- `Koan.Core.Json.KoanJsonContractResolver`: editor-hidden common Json.NET array construction for
+  concrete additive collections. Existing native constructors, IList and ICollection contracts take
+  precedence. The fallback uses only public parameterless construction and exact `Add(T)`; seeded
+  constructor values require public `Clear()` or fail. Data and Web inherit this logic while retaining
+  their own persistence and operation policy. It does not change global JsonConvert defaults.
 - `KoanContext`: one exact-type-keyed immutable context snapshot for the current logical execution
   flow. `Push<T>` and `Suppress<T>` restore the prior snapshot when their scopes are disposed.
 - `IKoanContextCarrier`: a module-owned serializer/restorer for one opaque, versioned context axis.

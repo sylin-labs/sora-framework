@@ -5,7 +5,7 @@ using Newtonsoft.Json.Serialization;
 namespace Koan.Web.Authorization;
 
 /// <summary>Each resolver belongs to one prepared operation, including its Newtonsoft contract cache.</summary>
-internal sealed class FieldAccessContractResolver : DefaultContractResolver
+internal sealed class FieldAccessContractResolver : Koan.Core.Json.KoanJsonContractResolver
 {
     private readonly FieldAccess _access;
 

@@ -14,6 +14,7 @@ using Koan.Data.Abstractions;
 using Koan.Data.Core;
 using Koan.Data.Core.Model;
 using Koan.Web.Attributes;
+using Koan.Web.Authorization;
 using Koan.Web.Endpoints;
 using Koan.Web.Hooks;
 using Koan.Web.Infrastructure;
@@ -488,7 +489,23 @@ public abstract class EntityController<TEntity, TKey> : ControllerBase
         }
         body["id"] = JValue.FromObject(id);
 
-        var model = body.ToObject<TEntity>();
+        TEntity? model;
+        try
+        {
+            var effective = ContextBuilder.Build(new QueryOptions(), ct, HttpContext);
+            var fields = await FieldAccess.Prepare(typeof(TEntity), effective.Services, effective.User, ct);
+            fields.DemandReplacement();
+            var settings = HttpContext.RequestServices.GetRequiredService<IOptions<MvcNewtonsoftJsonOptions>>().Value.SerializerSettings;
+            model = body.ToObject<TEntity>(JsonSerializer.Create(fields.CreateSerializerSettings(settings)));
+        }
+        catch (UnauthorizedAccessException error)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { code = KoanWebConstants.Codes.FieldAccess.Denied, error = error.Message });
+        }
+        catch (Exception error) when (error is JsonException or NotSupportedException)
+        {
+            return BadRequest(new { code = KoanWebConstants.Codes.FieldAccess.Unsupported, error = error.Message });
+        }
         if (model is null) return BadRequest(new { error = "Request body could not be bound to the entity" });
         return await ExecuteUpsert(model, ct, id);
     }

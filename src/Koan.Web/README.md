@@ -192,5 +192,18 @@ JSON-ignored property still restricts replacement; JSON ignoring remains intact 
 Object/interface slots, legacy ISerializable contracts and nonsealed object contracts conservatively
 require guarded serialization, including a nonsealed root supplied by its actual runtime type. Custom
 formatters/resolvers/converters or suppressed buffering on those contracts refuse. Sealed, fully known
-unrestricted contracts retain their original native formatter path. No application override bypasses
+unrestricted output contracts retain their original native formatter path. No application override bypasses
 this boundary.
+
+## Typed JSON collections
+
+Standard typed POST bodies and Entity PUT replacements can bind additive collection arrays, including
+values inside dictionaries. A concrete `IEnumerable<T>` needs a public parameterless constructor and
+`Add(T)` when Json.NET has no native constructor. Seeded collections also need `Clear()` so supplied
+values replace defaults. Native constructors remain authoritative. No application converter is needed.
+
+This shares collection construction with Data, not persistence permissions: nonpublic setters remain
+unwritable and storage discriminators are not introduced. Governed bodies retain complete field-write
+admission; PUT uses the same prepared serializer before normal endpoint authorization. Standard naming,
+converters and MVC settings are retained. Custom unrestricted resolvers and input formatters remain application-owned;
+arbitrary custom serialization and standalone JsonConvert calls are outside this guarantee.

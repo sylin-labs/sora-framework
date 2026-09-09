@@ -251,9 +251,7 @@ public sealed class FieldAccess
     /// <summary>Copy serializer settings and apply this operation's decisions plus optional stricter protocol exclusions.</summary>
     public JsonSerializerSettings CreateSerializerSettings(JsonSerializerSettings template)
     {
-        if (template.ContractResolver is not null
-            && template.ContractResolver.GetType() != typeof(CamelCasePropertyNamesContractResolver)
-            && template.ContractResolver.GetType() != typeof(DefaultContractResolver))
+        if (!UsesStandardResolver(template.ContractResolver))
         {
             if (RequiresGuardedSerialization)
                 throw new NotSupportedException("Conditional field access requires the standard Newtonsoft contract resolver. Remove the custom resolver for this typed response.");
@@ -277,6 +275,11 @@ public sealed class FieldAccess
         };
         return settings;
     }
+
+    internal static bool UsesStandardResolver(IContractResolver? resolver)
+        => resolver is null || resolver.GetType() == typeof(DefaultContractResolver)
+            || resolver.GetType() == typeof(CamelCasePropertyNamesContractResolver)
+            || resolver.GetType() == typeof(Koan.Core.Json.KoanJsonContractResolver);
 
     private bool ContainsRestriction(Type type, HashSet<Type> visited)
     {

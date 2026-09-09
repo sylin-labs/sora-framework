@@ -76,3 +76,11 @@ AddKoan binds Koan:BackgroundServices to KoanBackgroundServiceOptions. Enabled=f
 orchestrator from executing child services; Services:<service-name>:Enabled controls an individual child.
 StartupTimeoutSeconds and FailFastOnStartupFailure use the same bound options. The directly resolved
 orchestrator and the hosted-service instance are the same singleton. Previously ignored settings now take effect.
+
+## Shared JSON collection construction
+
+Data and standard typed Web input reuse Core's additive collection construction. A concrete
+`IEnumerable<T>` with a public parameterless constructor and `Add(T)` can round-trip its JSON array
+when Json.NET has no native creator. Constructor-seeded values require a public `Clear()` and are
+replaced by the supplied array. Applications add no registration. The shared resolver adds no
+private-setter access, persistence discriminator or authorization policy.

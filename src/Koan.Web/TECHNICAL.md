@@ -23,6 +23,11 @@ expansion no adapter can serve fails closed with `422`; a response past the safe
 ## Key types and surfaces
 
 - `EntityController<TEntity, TKey>`
+- Standard Newtonsoft input uses the operation resolver even for unrestricted typed bodies, sharing
+  `KoanJsonContractResolver` array construction with Data. Custom unrestricted resolvers or formatter
+  subclasses keep their original reader. Member gates remain in `FieldAccessContractResolver`; no persistence setter or
+  Entity discriminator policy enters request binding. PUT prepares the same field admission/settings
+  before materializing its route-authoritative body and then enters ordinary endpoint authorization.
 - `IWebContextContributor` and `WebContext` for ordered, scoped request-context decisions
 - Transformers for payload shaping (see WEB-0035)
 - `GET /.well-known/Koan/facts` projects `IKoanRuntimeFacts.Current` through `KoanFactJson`.

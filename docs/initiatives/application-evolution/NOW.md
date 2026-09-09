@@ -18,11 +18,15 @@ Read the [charter](README.md) and [live ledger](PROGRESS.md), then
 
 ## Current corrective slice
 
-Resume [AE-12 Entity insertion](work-items/12-entity-insertion.md) on the existing working tree.
-The thin Insert forwarding and explicit-default Save correction pass 36 focused tests, independent
-review and all eight coherence legs. Follow the normal publication boundary. AE-11 and the Web
-discovery correction are published through release 34406712072 at `6f5a6576b`.
-Public-package brownfield acceptance remains distinct from local owner checks.
+Resume the reviewed [AE-12 Entity insertion](work-items/12-entity-insertion.md),
+[AE-13 enum convention](work-items/13-mcp-enum-wire.md) and
+[AE-14 collection construction](work-items/14-additive-json-collections.md) publication increment.
+AE-12 passes 36 focused checks. AE-13/14 pass 58 MCP, 68 Web and six Data checks, with independent
+source review and a reproduced custom-reader compatibility correction. All eight combined repository
+coherence legs pass. Follow the normal publication boundary. AE-11 and the Web discovery correction
+are published through release 34406712072 at `6f5a6576b`; public brownfield checks now reach their
+assertions. The consumer's four enum/body-binding failures must pass after public adoption of this
+increment. Local owner checks are not public-package application acceptance.
 Do not start another ledger or AE-02 while this corrective slice is unsettled.
 ## After the current corrective slice
 
