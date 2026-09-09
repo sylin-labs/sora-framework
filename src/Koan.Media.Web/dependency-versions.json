@@ -1,9 +1,9 @@
 {
-  "Sylin.Koan.Media.Abstractions": "1.0.22",
-  "Sylin.Koan.Media.Core": "1.0.24",
-  "Sylin.Koan.Storage": "1.0.23",
+  "Sylin.Koan.Media.Abstractions": "1.0.23",
+  "Sylin.Koan.Media.Core": "1.0.25",
+  "Sylin.Koan.Storage": "1.0.24",
   "Sylin.Koan.Storage.Abstractions": "1.0.20",
   "Sylin.Koan.Data.Core": "1.0.50",
-  "Sylin.Koan.Web": "1.0.39",
-  "$transitive": "56B306A47E6FF57C13A7975B4E0FB352BA30A68DDAF6C22C86F9A6373BD45D93"
+  "Sylin.Koan.Web": "1.0.40",
+  "$transitive": "38C998E6BA425F672209CA499F36ECDF9578F16EC9D567695ABAB7D16EA3814D"
 }

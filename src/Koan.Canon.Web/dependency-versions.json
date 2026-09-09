@@ -1,7 +1,7 @@
 {
-  "Sylin.Koan.Canon": "1.0.30",
+  "Sylin.Koan.Canon": "1.0.31",
   "Sylin.Koan.Core": "1.0.35",
-  "Sylin.Koan.Web": "1.0.39",
-  "Sylin.Koan.Web.Extensions": "1.0.25",
-  "$transitive": "59F97EBA035527017F8E0F0FF10FA8F58CC6CF8713E41A072D20C5A78FD2CD77"
+  "Sylin.Koan.Web": "1.0.40",
+  "Sylin.Koan.Web.Extensions": "1.0.26",
+  "$transitive": "42DE530E7618255F83471EC4AA5965DB1B7B80568AD2146E96FA6B01F49CD03E"
 }
