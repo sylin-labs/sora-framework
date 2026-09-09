@@ -43,6 +43,12 @@ caller and owns no fleet roster, so reservation cannot be honored and is never s
 item and a read-only orchestration snapshot. The coordinator persists the work item before enqueue and
 after handler mutation. The ledger stores orchestration state separately as `JobRecord` entities.
 
+The snapshot's `State.GateKey` is the gate key captured with THIS execution's claim: the declared or
+runtime-resolved gate for ordinary jobs, the pool-elected member for pooled jobs, and null when the
+job carries no gate. It is the claim-time projection, not the work item's current routing and not a
+later `Backoff` key override, so a handler compares business routing with the claimed gate without
+querying its own ledger entry.
+
 ### Work address and scheduling placement
 
 The coordinator captures an immutable `EntityContext` before the first asynchronous boundary, together

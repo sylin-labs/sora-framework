@@ -15,4 +15,13 @@ public sealed record JobState(
     string? LastError,
     string? DeferReason,
     DateTimeOffset? Deadline,
-    string? CorrelationId);
+    string? CorrelationId)
+{
+    /// <summary>
+    /// The gate key captured from THIS execution's claimed ledger row: the declared (or runtime-resolved) gate
+    /// for ordinary jobs, the pool-elected member for pooled jobs, null when the job carries no gate. It is the
+    /// claim-time projection, not the work item's current mutable routing, not a later <c>Backoff</c> key
+    /// override, and not proof of continuing ownership.
+    /// </summary>
+    public string? GateKey { get; init; }
+}

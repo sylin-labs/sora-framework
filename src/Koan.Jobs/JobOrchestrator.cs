@@ -818,7 +818,10 @@ internal sealed class JobOrchestrator
 
     private static JobState ToState(JobRecord r) => new(
         r.Status, r.Action, r.Attempt, r.Reschedules, r.FirstSubmittedAt, r.LastSettledAt,
-        r.LastError, r.DeferReason, r.Deadline, r.CorrelationId);
+        r.LastError, r.DeferReason, r.Deadline, r.CorrelationId)
+    {
+        GateKey = r.GateKey,   // the gate captured with THIS claim: declared/resolved key, or the pool-elected member
+    };
 
     private static void SetStatus(JobRecord r, JobStatus to, DateTimeOffset at, string? note)
     {

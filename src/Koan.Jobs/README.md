@@ -31,6 +31,16 @@ await review.Job.Submit();
 var status = await review.Job.Status();
 ```
 
+Inside the handler, `context.State` is the read-only orchestration snapshot of THIS execution. Its
+`GateKey` is the gate under which this execution was claimed: the declared (or runtime-resolved)
+gate for a `[JobGate]` type, the elected pool member for a `[JobPool]` type, and null when the job
+carries no gate. It does not track the work item's routing after the claim, and it is not a later
+`Backoff` key override:
+
+```csharp
+var claimedGate = context.State.GateKey;   // captured with THIS claim, not current routing
+```
+
 The same pointwise intent applies to a business selection or a provider-bounded Entity stream:
 
 ```csharp

@@ -20,15 +20,17 @@ public sealed class GreetJob : Entity<GreetJob>, IKoanJob<GreetJob>
     public string Name { get; set; } = "";
     public string? Greeting { get; set; }
     public static int Executions;
+    public static string? LastGateKey;
 
     public static Task Execute(GreetJob job, JobContext ctx, CancellationToken ct)
     {
         Interlocked.Increment(ref Executions);
+        LastGateKey = ctx.State.GateKey;
         job.Greeting = $"Hello, {job.Name}";
         return Task.CompletedTask;
     }
 
-    public static void Reset() => Executions = 0;
+    public static void Reset() { Executions = 0; LastGateKey = null; }
 }
 
 /// <summary>Reports one durable progress value so settlement cannot erase the observer-visible update.</summary>
@@ -104,18 +106,32 @@ public sealed class GatedJob : Entity<GatedJob>, IKoanJob<GatedJob>
     public static int Executions;
     public static bool Trip429;
 
+    /// <summary>Per-execution observations of ctx.State read AFTER the control verbs ran, keyed by work item (AE-18).</summary>
+    public static readonly ConcurrentQueue<(string WorkId, string GateKey)> ClaimedGates = new();
+
+    /// <summary>When set, the 429 backoff overrides the gate key with this explicit key.</summary>
+    public static string? OverrideKey;
+
     public static Task Execute(GatedJob job, JobContext ctx, CancellationToken ct)
     {
         Interlocked.Increment(ref Executions);
         if (Trip429)
         {
             Trip429 = false;
-            ctx.Backoff(TimeSpan.FromMinutes(5));
+            ctx.Backoff(TimeSpan.FromMinutes(5), OverrideKey);
         }
+        // Read after the verb: the snapshot is unchanged even when this execution backed off.
+        ClaimedGates.Enqueue((job.Id, ctx.State.GateKey ?? ""));
         return Task.CompletedTask;
     }
 
-    public static void Reset() { Executions = 0; Trip429 = false; }
+    public static void Reset()
+    {
+        Executions = 0;
+        Trip429 = false;
+        OverrideKey = null;
+        ClaimedGates.Clear();
+    }
 }
 
 /// <summary>Coalesces concurrent/duplicate submits by a declared key.</summary>
@@ -499,13 +515,21 @@ public sealed class PoolJob : Entity<PoolJob>, IKoanJob<PoolJob>
 {
     public static int Executions;
 
+    /// <summary>Per-execution observations of ctx.State, keyed by work item (AE-18).</summary>
+    public static readonly ConcurrentQueue<(string WorkId, string GateKey)> ClaimedGates = new();
+
     public static Task Execute(PoolJob job, JobContext ctx, CancellationToken ct)
     {
         Interlocked.Increment(ref Executions);
+        ClaimedGates.Enqueue((job.Id, ctx.State.GateKey ?? ""));
         return Task.CompletedTask;
     }
 
-    public static void Reset() => Executions = 0;
+    public static void Reset()
+    {
+        Executions = 0;
+        ClaimedGates.Clear();
+    }
 }
 
 /// <summary>Mutable pool resolver for JOBS-0007 tests: the test updates Members at runtime to simulate

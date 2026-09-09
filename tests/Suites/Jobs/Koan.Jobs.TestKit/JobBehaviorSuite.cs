@@ -431,6 +431,79 @@ public abstract class JobBehaviorSuite
         (await host.StatusOf<GatedJob>(c.Id)).Should().Be(JobStatus.Completed);
     }
 
+    [Fact]
+    public async Task state_gatekey_is_null_for_an_ungated_job()
+    {
+        GreetJob.Reset();
+        await using var host = await CreateHostAsync();
+        var j = new GreetJob { Name = "ungated" };
+        await j.Job.Submit();
+        await host.Drain();
+        GreetJob.Executions.Should().Be(1);
+        GreetJob.LastGateKey.Should().BeNull("an ungated job claims no gate");
+    }
+
+    [Fact]
+    public async Task claimed_gate_state_survives_a_persisted_routing_change()
+    {
+        // The snapshot's GateKey is the key captured with THIS claim, not a re-resolution of the work item's
+        // current routing: even after the TEST changes and persists the routing between attempts, both claims
+        // retain the gate recorded on the ledger row at submit. (Deferral performs no work-item auto-save; the
+        // routing change is written by the test, not the handler.)
+        GatedJob.Reset();
+        await using var host = await CreateHostAsync();
+        var j = new GatedJob { Host = "api-a" };
+        await j.Job.Submit();
+
+        GatedJob.Trip429 = true;   // attempt 1 takes the existing backoff deferral path
+        await host.Drain();
+
+        var stored = await GatedJob.Get(j.Id);
+        stored!.Host = "api-b";
+        await GatedJob.Upsert(stored);
+
+        host.Advance(TimeSpan.FromMinutes(5));
+        await host.Drain();
+
+        (await GatedJob.Get(j.Id))!.Host.Should().Be("api-b", "the work item's routing actually changed on disk");
+        (await host.StatusOf<GatedJob>(j.Id)).Should().Be(JobStatus.Completed);
+        GatedJob.ClaimedGates.Where(o => o.WorkId == j.Id).Select(o => o.GateKey)
+            .Should().Equal(new[] { "api-a", "api-a" },
+                "both claims project the gate captured with the claim, not the work item's new routing");
+    }
+
+    [Fact]
+    public async Task backoff_override_gates_peers_while_the_snapshot_keeps_the_claimed_gate()
+    {
+        // An explicit Backoff key redirects the shared gate WITHOUT rewriting the claimed row: peers of the
+        // override key defer at dispatch, while every execution of the original job still sees its own gate.
+        GatedJob.Reset();
+        await using var host = await CreateHostAsync();
+        var a = new GatedJob { Host = "api" };
+        var b = new GatedJob { Host = "manual:hot-key" };   // its declared gate IS the override key
+        await a.Job.Submit();
+
+        GatedJob.Trip429 = true;                  // attempt 1 takes the 429 path
+        GatedJob.OverrideKey = "manual:hot-key";  // and backs off the override key instead of "api"
+        await host.Drain();
+
+        await b.Job.Submit();
+        await host.Drain();
+
+        (await host.StatusOf<GatedJob>(b.Id)).Should().Be(JobStatus.Queued, "the override gate defers peers at dispatch");
+
+        host.Advance(TimeSpan.FromMinutes(5));
+        await host.Drain();
+
+        (await host.StatusOf<GatedJob>(a.Id)).Should().Be(JobStatus.Completed);
+        (await host.StatusOf<GatedJob>(b.Id)).Should().Be(JobStatus.Completed);
+        GatedJob.ClaimedGates.Where(o => o.WorkId == a.Id).Select(o => o.GateKey)
+            .Should().Equal(new[] { "api", "api" },
+                "both claims project the claimed gate, even after Backoff(override) ran in the first execution");
+        GatedJob.ClaimedGates.Single(o => o.WorkId == b.Id).GateKey.Should().Be("manual:hot-key",
+            "the peer's snapshot is its own declared gate, not the shared gate state");
+    }
+
     // --- retry / cancel / timeout ---
 
     [Fact]
@@ -1205,6 +1278,30 @@ public abstract class JobBehaviorSuite
         var done = await host.JobFor<PoolJob>(id);
         done!.GateKey.Should().NotBeNull("pool job GateKey is stamped at claim time");
         done.GateKey.Should().Be("server-a");
+    }
+
+    [Fact]
+    public async Task pooled_job_sees_the_elected_member_as_its_claimed_gate()
+    {
+        // The queued row has no gate key, yet the handler's snapshot carries the member elected at claim:
+        // State.GateKey projects THIS claim, so pool work can self-identify its dispatch target without
+        // querying the ledger.
+        PoolJob.Reset();
+        var resolver = new TestPoolResolver(new[] { "server-a" });
+        await using var host = await CreateHostAsync(
+            configureServices: s => s.AddSingleton<IJobPoolResolver>(resolver));
+        var j = new PoolJob();
+        var id = j.Id;
+        await j.Job.Submit();
+
+        var queued = await host.JobFor<PoolJob>(id);
+        queued!.GateKey.Should().BeNull("the member is elected only at claim time");
+
+        await host.Drain();
+
+        PoolJob.ClaimedGates.Single(o => o.WorkId == j.Id).GateKey.Should().Be("server-a",
+            "the snapshot carries the elected member although the queued key was null");
+        (await host.StatusOf<PoolJob>(id)).Should().Be(JobStatus.Completed);
     }
 
     [Fact]
