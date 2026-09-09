@@ -123,7 +123,7 @@ internal sealed class MongoEntityPlan<TEntity, TKey>
             payload.Remove(Infrastructure.Constants.Storage.Identity);
             payload[_identityJsonName] = identity;
         }
-        return (TEntity)(JsonConvert.DeserializeObject(payload.ToString(Formatting.None), typeof(TEntity), _json)
+        return (TEntity)(payload.ToObject(typeof(TEntity), JsonSerializer.Create(_json))
             ?? throw new InvalidDataException($"MongoDB returned an empty document for '{typeof(TEntity).FullName}'."));
     }
 

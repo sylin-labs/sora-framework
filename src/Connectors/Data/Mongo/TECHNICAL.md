@@ -25,6 +25,8 @@ adapter decisions. `DateTime` and `DateTimeOffset` are normalized to UTC BSON da
 `TimeOnly` use comparable deterministic encodings.
 Typed Json.NET tokens flow directly into BSON without reparsing JSON text, retaining CLR integer widths,
 decimal precision and binary token identity. Legacy numeric widths remain readable when values fit the model.
+The read path likewise hydrates from typed tokens. Nested JSON documents retain native dates, binary and
+representable decimal values through replacement writes. URI values preserve their original escaped strings.
 
 An explicit `MappingPlan` replaces naming conventions with compiled physical bindings. Reads hydrate through those
 bindings. Writes use `$set` for each declared path and `$setOnInsert` for a mapped `_id`, preserving unbound fields and

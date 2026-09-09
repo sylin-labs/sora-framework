@@ -21,7 +21,11 @@ internal static class MongoValues
         JTokenType.Float => Number((JValue)token),
         JTokenType.Bytes => new BsonBinaryData(token.Value<byte[]>()!),
         JTokenType.Guid => new BsonString(token.Value<Guid>().ToString("D")),
-        JTokenType.Date => new BsonDateTime(token.Value<DateTime>().ToUniversalTime()),
+        JTokenType.Uri => new BsonString(token.Value<Uri>()!.OriginalString),
+        JTokenType.TimeSpan => new BsonInt64(token.Value<TimeSpan>().Ticks),
+        JTokenType.Date => ((JValue)token).Value is DateTimeOffset offset
+            ? new BsonDateTime(offset.UtcDateTime)
+            : new BsonDateTime(token.Value<DateTime>().ToUniversalTime()),
         _ => new BsonString(token.Value<string>() ?? token.ToString())
     };
 
@@ -37,7 +41,7 @@ internal static class MongoValues
             BsonType.Int32 => new JValue(value.AsInt32),
             BsonType.Int64 => new JValue(value.AsInt64),
             BsonType.Double => new JValue(value.AsDouble),
-            BsonType.Decimal128 => new JValue(value.AsDecimal128.ToString()),
+            BsonType.Decimal128 => new JValue(Decimal(value.AsDecimal128)),
             BsonType.Binary => new JValue(value.AsBsonBinaryData.Bytes),
             BsonType.DateTime => new JValue(value.ToUniversalTime()),
             BsonType.ObjectId => new JValue(value.AsObjectId.ToString()),

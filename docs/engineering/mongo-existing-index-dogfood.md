@@ -55,3 +55,16 @@ decimal/binary round trips and the full Mongo owner suite before releasing.
 
 The final Mongo suite passes all 52 tests, including the native scalar regression. The detailed copied-data
 codec scan found no semantic value loss; prior nested differences were field ordering or numeric widths.
+
+## Complete native token conversion
+
+The public 1.0.28 rehearsal caught 1,095 Sighting replacement-write failures. Their nested media properties
+contain CLR Uri values. JTokenWriter correctly retains Uri tokens, but MongoValues' string fallback attempts
+an unsupported IConvertible cast. The application evaluation tests independently reproduced two failures.
+The same adapter conversion owner must explicitly handle Uri, TimeSpan and offset-bearing date JValues.
+Use standard invariant scalar representations, preserve existing URI strings, and extend the real Mongo
+scalar characterization before implementation. No application workaround or public surface is needed.
+The read boundary must also avoid a JSON text round-trip: it turns dates, binary and decimal values inside
+JObjects into strings. Reuse JObject.ToObject with the existing adapter serializer and native decimal tokens.
+The regression saves, reads and saves a nested document, then compares its exact raw BSON.
+All 53 Mongo connector tests pass after the correction, including exact nested BSON replacement equality.

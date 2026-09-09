@@ -1,6 +1,7 @@
 using Koan.Data.Abstractions.Naming;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using Newtonsoft.Json.Linq;
 
 namespace Koan.Data.Connector.Mongo.Tests.Specs.Filtering;
 
@@ -37,6 +38,52 @@ public sealed class MongoEnumStorageSpec(MongoFixture fixture, ITestOutputHelper
         public long Total { get; set; }
         public decimal Amount { get; set; }
         public byte[] Bytes { get; set; } = [];
+    }
+
+    [Fact]
+    public async Task Native_uri_and_special_tokens_survive_nested_document_writes()
+    {
+        RequireBackingStore();
+        await using var host = await BootAsync();
+        var partition = NewPartition("native-specials");
+        using var lease = Lease(partition);
+        var name = StorageNameGenerator.Generate(typeof(SpecialDocument), partition,
+            new MongoAdapterFactory().GetNamingCapability(host.Services));
+        var collection = new MongoClient(Fixture.ConnectionString)
+            .GetDatabase(Fixture.Database).GetCollection<BsonDocument>(name);
+        var stamp = new DateTimeOffset(2026, 9, 9, 1, 2, 3, TimeSpan.FromHours(-4));
+        var saved = await new SpecialDocument
+        {
+            Cover = new Uri("https://example.test/cover%20image.png?q=one%20two"),
+            Gallery = [new Uri("relative/image.png", UriKind.Relative)],
+            Tokens = new JObject
+            {
+                ["uri"] = new JValue(new Uri("https://example.test/image.png")),
+                ["date"] = new JValue(stamp),
+                ["duration"] = new JValue(TimeSpan.FromSeconds(12)),
+                ["amount"] = new JValue(12.34m),
+                ["bytes"] = new JValue(new byte[] { 1, 2, 3 }),
+                ["guid"] = new JValue(Guid.Parse("a11d611e-2725-424f-b5b1-4551ab2f5eda"))
+            }
+        }.Save();
+        var raw = await collection.Find(new BsonDocument("_id", saved.Id)).SingleAsync();
+        raw["cover"].Should().Be(new BsonString(saved.Cover.OriginalString));
+        raw["gallery"][0].Should().Be(new BsonString("relative/image.png"));
+        raw["tokens"]["date"].Should().Be(new BsonDateTime(stamp.UtcDateTime));
+        raw["tokens"]["duration"].Should().Be(new BsonInt64(TimeSpan.FromSeconds(12).Ticks));
+        raw["tokens"]["guid"].Should().Be(new BsonString("a11d611e-2725-424f-b5b1-4551ab2f5eda"));
+        var restored = (await SpecialDocument.Get(saved.Id))!;
+        restored.Cover.Should().Be(saved.Cover);
+        restored.Gallery.Should().Equal(saved.Gallery);
+        await restored.Save();
+        (await collection.Find(new BsonDocument("_id", saved.Id)).SingleAsync()).Equals(raw).Should().BeTrue();
+    }
+
+    private sealed class SpecialDocument : Entity<SpecialDocument>
+    {
+        public Uri Cover { get; set; } = new("https://example.test");
+        public List<Uri> Gallery { get; set; } = [];
+        public JObject Tokens { get; set; } = new();
     }
 
     [Fact]
