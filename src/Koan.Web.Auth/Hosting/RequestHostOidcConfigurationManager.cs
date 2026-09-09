@@ -55,7 +55,7 @@ internal sealed class RequestHostOidcConfigurationManager : IConfigurationManage
             ?? throw new InvalidOperationException(
                 "Koan.Web.Auth: the self-hosted OIDC provider's authority is relative and there is no active request " +
                 "to resolve it against. A challenge must originate from an HTTP request.");
-        return $"{req.Scheme}://{req.Host}";
+        return new Uri($"{req.Scheme}://{req.Host}").GetLeftPart(UriPartial.Authority);
     }
 
     private string ResolveBackchannelBase(string publicBase)

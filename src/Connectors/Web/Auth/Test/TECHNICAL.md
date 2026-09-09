@@ -22,6 +22,8 @@ public issuer and browser authorization endpoint; the running Kestrel server add
 userinfo, and JWKS back-channel endpoints. The authorization code records the public issuer, so an ID token minted by
 an internal token request still has the exact issuer advertised to the browser-facing handler. This supports Docker
 port publishing and reverse proxies without an application-owned back-channel option or DNS workaround.
+Discovery and authorization canonicalize the local URI authority, including default ports, before constructing
+the issuer. The consuming handler keeps exact issuer, audience, signature and nonce validation enabled.
 
 Userinfo emits `sub`, `id`, username, email, roles, permissions, and custom claims. Web Auth maps roles to
 `ClaimTypes.Role`, permissions to `Koan.permission`, and extra claims one-for-one.

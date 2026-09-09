@@ -18,7 +18,8 @@ public sealed class OidcDiscoveryController(IOptionsSnapshot<TestProviderOptions
     public IActionResult Discovery()
     {
         if (!opts.Value.IsActive(env)) return NotFound();
-        var baseUrl = BaseUrl(opts.Value);
+        var baseUrl = new Uri($"{Request.Scheme}://{Request.Host}").GetLeftPart(UriPartial.Authority)
+            + Constants.Routes.Base;
         return Ok(new
         {
             issuer = baseUrl,
@@ -45,8 +46,4 @@ public sealed class OidcDiscoveryController(IOptionsSnapshot<TestProviderOptions
         return Ok(new { keys = new[] { new { kty = jwk.Kty, use = jwk.Use, alg = jwk.Alg, kid = jwk.Kid, crv = jwk.Crv, x = jwk.X, y = jwk.Y } } });
     }
 
-    private string BaseUrl(TestProviderOptions o)
-    {
-        return $"{Request.Scheme}://{Request.Host}{Constants.Routes.Base}";
-    }
 }

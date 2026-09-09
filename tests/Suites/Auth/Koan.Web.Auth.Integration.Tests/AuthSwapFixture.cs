@@ -101,10 +101,11 @@ public sealed class AuthSwapFixture : IAsyncLifetime
     /// back-channel receives no such mapping. A successful OIDC flow therefore proves that Koan uses the internal
     /// Kestrel address for discovery/token/userinfo/JWKS while preserving this public issuer.
     /// </summary>
-    public HttpClient NewSplitHostClient()
+    public HttpClient NewSplitHostClient(string? publicBaseUrl = null)
     {
+        publicBaseUrl ??= PublicBaseUrl;
         var cookies = new CookieContainer();
-        cookies.Add(new Uri(PublicBaseUrl),
+        cookies.Add(new Uri(publicBaseUrl),
             new Cookie("_tp_user", Uri.EscapeDataString("alice|alice@example.com")) { Path = "/" });
         var handler = new SocketsHttpHandler
         {
@@ -127,7 +128,7 @@ public sealed class AuthSwapFixture : IAsyncLifetime
                 }
             }
         };
-        return new HttpClient(handler) { BaseAddress = new Uri(PublicBaseUrl) };
+        return new HttpClient(handler) { BaseAddress = new Uri(publicBaseUrl) };
     }
 
     public async ValueTask DisposeAsync()

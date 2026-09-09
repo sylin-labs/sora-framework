@@ -102,7 +102,9 @@ public sealed class AuthorizeController(IOptionsSnapshot<TestProviderOptions> op
     var profile = new UserProfile(parts.ElementAtOrDefault(0) ?? "dev", parts.ElementAtOrDefault(1) ?? "dev@example.com", null);
     var (roles, perms, extraClaims) = ParseExtras(o);
     var isOpenId = !string.IsNullOrWhiteSpace(scope) && scope.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("openid", StringComparer.OrdinalIgnoreCase);
-    var issuer = isOpenId ? $"{Request.Scheme}://{Request.Host}{Constants.Routes.Base}" : null;
+    var issuer = isOpenId
+        ? new Uri($"{Request.Scheme}://{Request.Host}").GetLeftPart(UriPartial.Authority) + Constants.Routes.Base
+        : null;
     var code = store.IssueCode(profile, TimeSpan.FromMinutes(5), code_challenge, roles, perms, extraClaims, nonce, isOpenId, issuer);
     var uri = new UriBuilder(redirect);
     var existingQuery = QueryHelpers.ParseQuery(uri.Query);

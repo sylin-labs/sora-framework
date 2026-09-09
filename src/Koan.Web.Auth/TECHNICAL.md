@@ -27,6 +27,8 @@ The local relative OIDC authority is projected as one logical provider with sepa
 request supplies its public issuer/authorization origin, while `IServerAddressesFeature` supplies its internal
 back-channel origin. If neither a bound address nor a loopback public origin is available, challenge fails with a
 correction naming the required Kestrel binding instead of attempting an unreachable public hostname.
+Local issuer origins use standard URI authority canonicalization so explicit default ports agree with
+implicit ones across browser redirects. This changes local issuer construction, never external issuer validation.
 
 ## Runtime behavior
 

@@ -75,6 +75,21 @@ public sealed class AuthEngineSwapSpec : IClassFixture<AuthSwapFixture>
     }
 
     [Fact]
+    public async Task OIDC_default_port_spelling_can_change_between_authorization_and_callback()
+    {
+        const string origin = "http://koan-browser.test";
+        using var client = _fx.NewSplitHostClient(origin);
+        await DriveLogin(client, "/auth/test-oidc/challenge?return=/e2e/whoami", "admin",
+            browserBaseUrl: origin, callbackHost: "koan-browser.test:80");
+        (await ReadWhoAmI(client)).GetProperty("authenticated").GetBoolean().Should().BeTrue();
+
+        client.DefaultRequestHeaders.Host = "koan-browser.test:80";
+        using var discovery = await client.GetAsync("/.testoauth/.well-known/openid-configuration");
+        using var document = JsonDocument.Parse(await discovery.Content.ReadAsStringAsync());
+        document.RootElement.GetProperty("issuer").GetString().Should().Be(origin + "/.testoauth");
+    }
+
+    [Fact]
     public async Task Provider_discovery_and_runtime_facts_project_the_same_compiled_plan()
     {
         using var client = _fx.NewClient();
@@ -121,7 +136,8 @@ public sealed class AuthEngineSwapSpec : IClassFixture<AuthSwapFixture>
     /// auto-redirect; cookies — correlation, nonce, auth — flow via the CookieContainer). On the dev Test
     /// authorize hop it appends a <c>roles</c> hint (test-only; in real OAuth custom params aren't forwarded).
     /// </summary>
-    private async Task DriveLogin(HttpClient client, string challenge, string injectRole, string? browserBaseUrl = null)
+    private async Task DriveLogin(HttpClient client, string challenge, string injectRole,
+        string? browserBaseUrl = null, string? callbackHost = null)
     {
         var url = new Uri((browserBaseUrl ?? _fx.BaseUrl) + challenge);
         var chain = new System.Collections.Generic.List<string>();
@@ -133,7 +149,10 @@ public sealed class AuthEngineSwapSpec : IClassFixture<AuthSwapFixture>
             HttpResponseMessage resp;
             try
             {
-                resp = await client.GetAsync(url, TestContext.Current.CancellationToken);
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                if (callbackHost is not null && url.AbsolutePath.EndsWith("/callback", StringComparison.Ordinal))
+                    request.Headers.Host = callbackHost;
+                resp = await client.SendAsync(request, TestContext.Current.CancellationToken);
             }
             catch (Exception exception)
             {
