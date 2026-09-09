@@ -1,8 +1,8 @@
 {
   "Sylin.Koan.Data.Core": "1.0.50",
   "Sylin.Koan.Data.Relational": "1.0.39",
-  "Sylin.Koan.Data.Relational.Npgsql": "1.0.37",
+  "Sylin.Koan.Data.Relational.Npgsql": "1.0.38",
   "Sylin.Koan.Data.Abstractions": "1.0.30",
   "Sylin.Koan.Core": "1.0.35",
-  "$transitive": "4DD82293DDAF4BD6E60620AB6B70219AE12B3EE094B01F6BE92E087BA861F249"
+  "$transitive": "7F55201F5D9B7C57EC6A0B8A80CE4DD0B90E507EFA6232DA919232BE7EE69BD5"
 }

@@ -1,6 +1,6 @@
 {
-  "Sylin.Koan.Identity": "1.0.25",
+  "Sylin.Koan.Identity": "1.0.26",
   "Sylin.Koan.Tenancy": "1.0.25",
   "Sylin.Koan.Web": "1.0.40",
-  "$transitive": "57B812FD76386FEAD4E17B3DA628979A94A4C10CA8851014CA29771B41402E2C"
+  "$transitive": "68C0634779056CE6ECECE694CCB0F91DA795F17F4E28FBC2E17D76B7F413FB5F"
 }
