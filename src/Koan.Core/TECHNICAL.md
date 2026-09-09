@@ -18,6 +18,11 @@ source: src/Koan.Core/
 ## Key types
 
 - Core primitives surfaced by other modules (data, web, messaging, ai).
+- `IKeyedLeaseGate`: process-local same-key action exclusion. One short lock joins gate lookup with
+  caller registration and final-reference retirement with removal; waiting and executing callers
+  retain the same gate. Semaphore waits, actions and releases run outside that lock. Timeout covers
+  acquisition only; cancellation is cooperative inside the action. This does not share action
+  results, provide a distributed lease, or fence cache invalidation against an in-flight factory.
 - `Koan.Core.Json.KoanJsonContractResolver`: editor-hidden common Json.NET array construction for
   concrete additive collections. Existing native constructors, IList and ICollection contracts take
   precedence. The fallback uses only public parameterless construction and exact `Add(T)`; seeded

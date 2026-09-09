@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,7 +20,8 @@ internal sealed class KeyedLeaseGate : IKeyedLeaseGate
         public int RefCount;
     }
 
-    private readonly ConcurrentDictionary<string, Gate> _gates = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Gate> _gates = new(StringComparer.Ordinal);
+    private readonly object _gateLock = new();
 
     public async ValueTask<T> RunAsync<T>(
         string key,
@@ -28,8 +29,13 @@ internal sealed class KeyedLeaseGate : IKeyedLeaseGate
         Func<CancellationToken, ValueTask<T>> action,
         CancellationToken ct)
     {
-        var gate = _gates.GetOrAdd(key, _ => new Gate());
-        Interlocked.Increment(ref gate.RefCount);
+        Gate gate;
+        lock (_gateLock)
+        {
+            if (!_gates.TryGetValue(key, out gate!))
+                _gates.Add(key, gate = new Gate());
+            gate.RefCount++;
+        }
         try
         {
             ct.ThrowIfCancellationRequested();
@@ -50,9 +56,10 @@ internal sealed class KeyedLeaseGate : IKeyedLeaseGate
         }
         finally
         {
-            if (Interlocked.Decrement(ref gate.RefCount) == 0)
+            lock (_gateLock)
             {
-                _gates.TryRemove(key, out _);
+                if (--gate.RefCount == 0)
+                    _gates.Remove(key);
             }
         }
     }
