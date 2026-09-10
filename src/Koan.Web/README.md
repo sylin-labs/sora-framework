@@ -88,9 +88,9 @@ surface. Static-file wiring stays dormant in API-only hosts that have no real we
   `web.mutation.insertUnsupported`. Ordinary unconstrained upsert keeps its existing semantics.
 - Mutation constraints mean declared Create/Update predicates or stamps. A read-only realization
   does not constrain writes. Existing coarse authorization, including server grants, remains authoritative.
-- Constrained bulk requests with any new or unavailable identity currently return 501 with
-  `web.mutation.bulkCreateUnsupported` before persistence. Submit creates individually. An update-only
-  batch retains its existing behavior. This is an interim compatibility boundary, not atomic bulk support.
+- Constrained bulk requests containing a new or unavailable identity return 501 with
+  `web.mutation.bulkCreateUnsupported` before persistence; submit creates individually. An update-only
+  batch keeps ordinary bulk semantics. Atomic mixed bulk creation is not offered.
 - Dry-run remains a tentative validation preview; it cannot prove identity availability or reserve a key.
   Existing authorized-update races require a separate conditional-write guarantee.
 
@@ -182,8 +182,12 @@ IActionResult outside the MVC invocation pipeline is also outside the result-fil
 
 For example, `PATCH /works/id` with `Content-Type: application/json-patch+json` and
 `[{"op":"replace","path":"/name","value":"Updated"}]` can edit an admitted field. The equivalent
-`application/json` or `application/merge-patch+json` document requires whole-value write permission.
-This initial boundary avoids ambiguous empty-object and aliased-path effects in legacy patch normalization.
+`application/json` or `application/merge-patch+json` document is admitted as a whole-value write and
+requires whole-value permission. Typed application restores a merged working copy rather than editing
+the stored row: identity and family-discriminator members, repeated members whose names differ only by
+case, and values that would create an abstract or interface member refuse correctively. Enum values
+bind by member name, dictionary keys keep their exact spelling, and a null merge-patch dictionary
+entry removes that entry.
 
 Typed access sidecars and relationship responses preserve member policy through their known framework
 wrappers. Inherited property gates use the actual containing resource type. An explicitly Access-declared

@@ -1,9 +1,6 @@
-# Koan Framework — agent retrieval map
-workflows into public artifacts. Convert observations into anonymous repository-owned reproductions.
+# Koan Framework agent retrieval map
 
 > Koan 1.0 is the stable .NET 10 release train.
-
-# Koan Framework — agent retrieval map
 
 Koan is an opinionated .NET 10 meta-framework for agentic, data-driven applications. Application code
 states business intent; capability pillars own composition, provider negotiation, lifecycle, and
@@ -65,6 +62,9 @@ capability genuinely needs an escape hatch, that capability documents it.
 - Engineer or migrate an application with an agent: docs/guides/agent-application-engineering.md
 - Foundation/composition/configuration: docs/reference/core/index.md
 - Entity persistence/query/providers: docs/reference/data/index.md
+- Entity document encoding, create-only writes, conditional replacement, and deferred routes: src/Koan.Data.Core/README.md
+- MongoDB index adoption and provider diagnostics: docs/reference/data/adapter-diagnostics.md
+- Typed HTTP updates and writable-member admission: docs/guides/patch-capabilities-howto.md
 - Ask analytics questions over my entities (counts, sums, groupings, materialized projections): docs/guides/data/entity-analytics.md
 - Use DuckDB as the embedded analytics engine: docs/guides/data/duckdb-engine.md
 - Let agents ask declared analytics questions (MCP): docs/guides/data/entity-analytics.md#agents
@@ -73,6 +73,8 @@ capability genuinely needs an escape hatch, that capability documents it.
 - Authentication/authorization/tenancy: docs/reference/identity/index.md
 - Jobs/Events/Transport: docs/reference/work/index.md
 - Jobs: docs/reference/jobs/index.md
+- Cache fill/removal ordering and consistency limits: docs/reference/data/cache.md
+- OpenGraph rendering and controller outcomes: docs/guides/opengraph-howto.md
 - Entity events and snapshot transport: docs/reference/communication/index.md
 - Cache/Storage/Media: docs/reference/state-content/index.md
 - AI/model operations: docs/reference/ai/index.md

@@ -45,17 +45,19 @@ after handler mutation. The ledger stores orchestration state separately as `Job
 
 The snapshot's `State.GateKey` is the gate key captured with THIS execution's claim: the declared or
 runtime-resolved gate for ordinary jobs, the pool-elected member for pooled jobs, and null when the
-job carries no gate. It is the claim-time projection, not the work item's current routing and not a
-later `Backoff` key override, so a handler compares business routing with the claimed gate without
-querying its own ledger entry.
+job carries no gate. It is immutable for the rest of this execution, and it is the claim-time
+projection: not the work item's current routing and not a later `Backoff` key override. The ledger
+record's own gate key is a separate, persisted value that deferral may reconfigure; successors
+inherit the record's key at chain time. A handler therefore compares business routing with the
+claimed gate without querying its own ledger entry.
 
 ### Work address and scheduling placement
 
 The coordinator captures an immutable `EntityContext` before the first asynchronous boundary, together
 with the opaque context carrier. Deferred source enumeration and each accepted work item restore that
 snapshot. `JobRecord.WorkSource`, `WorkAdapter` and `WorkPartition` persist only the logical data address;
-transactions and cache controls are never serialized. Missing address fields on legacy records mean
-the host default. Source and adapter selectors are case-normalized; partition spelling is preserved.
+transactions and cache controls are never serialized. An absent address field means the host default
+address. Source and adapter selectors are case-normalized; partition spelling is preserved.
 
 The built-in durable ledger clears source, adapter and partition at its I/O boundary, retaining the
 submission transaction coordinator. Work persistence, ledger append and wake stamp therefore retain
@@ -64,14 +66,15 @@ submission transaction. Successors inherit the original record address. Invalid 
 before handler execution through the existing context-failure settlement.
 
 Ledger, gates, wake stamp, roster and metrics reside in the default host data store. `IAmbientExempt`
-continues to govern managed ambient fields only; this change does not alter physical routing for other
-Entity types. Existing partitioned ledger collections require operator reconciliation before upgrade;
-Jobs does not discover or silently move records between stores.
+governs managed ambient fields only and does not alter physical routing for other Entity types. Jobs
+never discovers or moves ledger records that live outside that store; a deployment that placed records
+elsewhere owns reconciling them.
 
 Per-work status/cancel and exclusivity include the full work address. Coalescing folds the address
-through `AmbientAxisComposer`, preserving the exact old coalesce key for the default address.
-`JobQuery` address fields use null as a wildcard and empty string as the default address, including
-legacy null or absent fields. Explicit gates retain their declared shared resource identity.
+through `AmbientAxisComposer`, so only submissions that share a work address can coalesce.
+`JobQuery` address fields use null as a wildcard and empty string as the default address; records
+without an address read as the default address. Explicit gates retain their declared shared resource
+identity.
 
 Use:
 

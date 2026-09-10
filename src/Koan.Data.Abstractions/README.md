@@ -107,7 +107,8 @@ and declared EnumMember aliases. Unnamed numeric values fail instead of silently
 Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
-Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+Rows or columns that hold numeric enum values are not rewritten automatically; they require an explicit
+migration to the string representation.
 ### Same-identity counterpart predicates
 
 `Filter.SameIdIn<TEntity>(predicate, partition)` requires a matching same-ID Entity in that

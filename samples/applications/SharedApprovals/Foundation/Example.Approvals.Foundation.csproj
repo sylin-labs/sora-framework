@@ -7,9 +7,9 @@
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="Sylin.Koan.App" Version="1.0.23" />
-    <PackageReference Include="Sylin.Koan.Data.Connector.Sqlite" Version="1.0.30" />
-    <PackageReference Include="Sylin.Koan.Mcp" Version="1.0.29" />
+    <PackageReference Include="Sylin.Koan.App" Version="1.0.53" />
+    <PackageReference Include="Sylin.Koan.Data.Connector.Sqlite" Version="1.0.61" />
+    <PackageReference Include="Sylin.Koan.Mcp" Version="1.0.65" />
     <PackageReference Include="Nerdbank.GitVersioning" Version="3.10.91" PrivateAssets="all" />
     <None Include="README.md" Pack="true" PackagePath="/" />
     <None Include="TECHNICAL.md" Pack="true" PackagePath="/" />

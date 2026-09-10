@@ -4,7 +4,7 @@ domain: data
 title: "Entity access and streaming"
 audience: [developers]
 status: current
-last_updated: 2026-07-15
+last_updated: 2026-09-10
 framework_version: v1.0.0
 validation:
   date_last_tested: 2026-07-15
@@ -106,11 +106,11 @@ public cursor, Pager, continuation token, or resume API.
 
 ## Consistency boundary
 
-Current streams use numbered offset pages. Concurrent inserts, deletes, or order-key changes can cause
+Streams use numbered offset pages. Concurrent inserts, deletes, or order-key changes can cause
 skips or duplicates. They are not mutation-safe and do not create a snapshot. Use an application-owned
 watermark/snapshot design when the business operation requires those guarantees.
 
-The current provider contract represents `Skip`/`OFFSET` as `Int32`. Koan rejects a requested page
+The provider contract represents `Skip`/`OFFSET` as `Int32`. Koan rejects a requested page
 before provider I/O when `(pageNumber - 1) * pageSize` exceeds `Int32.MaxValue`.
 
 The selected or rejected execution appears as `koan.data.stream.execution` in the shared facts

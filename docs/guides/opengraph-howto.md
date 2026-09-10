@@ -3,7 +3,7 @@ type: GUIDE
 domain: web
 audience: [developers]
 status: current
-last_updated: 2026-07-18
+last_updated: 2026-09-10
 framework_version: v1.0.0
 validation:
   date_last_tested: 2026-07-18
@@ -123,15 +123,22 @@ block should land; if the marker is absent, the block is inserted before `</head
 
 ## 4. Keep the application fallback
 
-The package inserts its middleware at Koan's `BeforeRouting` boundary. The application continues to own its
-normal static-file and SPA fallback behavior.
+The package contributes its middleware at Koan's post-authorization Web pipeline boundary. The
+application continues to own its normal static-file and SPA fallback behavior.
 
 On a `GET` navigation (Accept includes `text/html`) the middleware injects the card
 and short-circuits. Asset paths, `/api` paths, non-html requests, and the disabled
 state all pass through to your fallback untouched.
 
-Because Koan contributes OpenGraph before routing, matching navigations are evaluated before an application fallback.
-The fallback remains authoritative whenever OpenGraph passes through.
+A request routed to a controller action always passes through, so a controller's own responses,
+errors, and 404s keep their status and body. Routing selects endpoints before this middleware runs,
+so injection applies only to navigations no controller route claimed. The fallback remains
+authoritative whenever OpenGraph passes through.
+
+Use automatic injection for content the application permits to be public. Card resolvers are
+application-supplied, and a cached card bypasses resolution without revalidating row or member Access.
+A controller rendering governed content checks current visibility before calling
+`IOpenGraphCardRenderer.RenderShellAsync(Request, ct)`; card fields must also suit that audience.
 
 ## How it behaves
 

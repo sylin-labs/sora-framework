@@ -55,6 +55,16 @@ Register `https://your-app/auth/google/callback` with Google. Start sign-in at
 Web Auth can also run a configuration-only OIDC/OAuth2 provider. No generic connector package is needed; set `Type`,
 provider endpoints or `Authority`, `ClientId`, and `ClientSecret` under `Koan:Web:Auth:Providers:{id}`.
 
+## Claims and role refresh
+
+Provider-owned claims and application-owned role decisions stay distinct. Web Auth maps the provider's
+roles to `ClaimTypes.Role` and its extra claims one-for-one; it does not define, normalize, or rank a
+role vocabulary, so a role means exactly what the application's authorization declares. Refreshing
+application-owned role claims belongs to the shared sign-in flow: an `IKoanAuthFlowHandler` may stamp or
+strip role claims on the mutable sign-in identity and re-check them during cookie-principal validation. An
+optional built-in handler applies an email-keyed allow/revoke file at sign-in
+(`Koan:Web:Auth:Lifecycle:RoleListFile`); an empty file path, the default, disables it.
+
 ## Guarantees and failure posture
 
 - Connector references declare availability; they do not silently enable an unconfigured real provider.

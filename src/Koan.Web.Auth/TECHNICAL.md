@@ -28,7 +28,8 @@ request supplies its public issuer/authorization origin, while `IServerAddresses
 back-channel origin. If neither a bound address nor a loopback public origin is available, challenge fails with a
 correction naming the required Kestrel binding instead of attempting an unreachable public hostname.
 Local issuer origins use standard URI authority canonicalization so explicit default ports agree with
-implicit ones across browser redirects. This changes local issuer construction, never external issuer validation.
+implicit ones across browser redirects. Canonicalization applies to locally projected issuers only;
+external issuers are validated exactly as configured.
 
 ## Runtime behavior
 
@@ -49,7 +50,14 @@ redirect to the elected provider when one exists.
 - sign-out handler failures are logged and local sign-out continues.
 
 Handlers are scoped, auto-discovered implementations of `IKoanAuthFlowHandler`, ordered by `Priority` and then full
-type name. Implement only the events the module owns; no DI registration is required.
+type name. Framework-contributed and application handlers share one pipeline. Provider-owned claims are mapped once
+from the provider's assertions; refreshing application-owned role claims is a flow-handler decision (stamping the
+mutable sign-in identity and re-validating the cookie principal), never a Web Auth normalization. These
+cookie events do not validate bearer tokens. The built-in
+role-list handler applies an email-keyed allow/revoke JSON file at sign-in when
+`Koan:Web:Auth:Lifecycle:RoleListFile:FilePath` is configured. At priority 50 it applies revocations after
+lower-priority handlers; a later handler can add roles again. Choose ordering deliberately for
+application-owned role authority. Implement only the events the module owns; no DI registration is required.
 
 ## Inspectability
 

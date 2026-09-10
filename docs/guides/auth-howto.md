@@ -4,7 +4,7 @@ domain: web
 title: "Authentication & Identity How-To"
 audience: [developers, architects, security-engineers]
 status: current
-last_updated: 2026-07-18
+last_updated: 2026-09-10
 framework_version: v1.0.0
 validation:
   date_last_tested: 2026-07-18
@@ -127,7 +127,10 @@ Prove both directions with personas:
 - `GET /admin/reports?_as=alice&_roles=admin` → admin → **200**
 - `GET /admin/reports?_as=bob&_roles=viewer` → authenticated, but not admin → **denied**
 
-Roles are deliberately coarse—they belong *in the credential* (the cookie or token). When you need decisions that depend on the specific resource, the specific action, or external policy, that's §7.
+Roles are deliberately coarse—they belong *in the credential* (the cookie or token). The credential's roles come from
+the identity provider's assertions or from the application's own `IKoanAuthFlowHandler` stamping them at sign-in;
+Koan maps them to `ClaimTypes.Role` and does not define or normalize a role vocabulary. When you need decisions that
+depend on the specific resource, the specific action, or external policy, that's §7.
 
 ---
 
@@ -248,7 +251,9 @@ public async Task Admin_route_allows_the_admin_dev_identity()
 }
 ```
 
-A complete, runnable example lives in `tests/Suites/Security/Koan.Security.Trust.IntegrationTests`—worth reading once; it's the same harness that caught a real dev-identity wiring bug before it could reach you.
+A complete runnable example lives in
+`tests/Suites/Security/Koan.Security.Trust.IntegrationTests`; it exercises the composed development
+identity and authorization boundary.
 
 ---
 

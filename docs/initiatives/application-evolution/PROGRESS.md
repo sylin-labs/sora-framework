@@ -4,11 +4,11 @@ domain: framework
 title: "Application evolution progress"
 audience: [maintainers, ai-agents]
 status: current
-last_updated: 2026-09-09
+last_updated: 2026-09-10
 framework_version: v1.0.0
 validation:
   status: reviewed
-  scope: published foundation and local AE-07/AE-08/AE-09 corrective work; independent adoption unmeasured
+  scope: published foundation and corrective capabilities with recorded consumer acceptance; independent adoption unmeasured
 ---
 
 # Application evolution progress
@@ -19,9 +19,16 @@ with links to the actual deliverable and evidence.
 
 ## Initiative state
 
-- Overall: active; shared-foundation milestone proved with published Koan dependencies.
+- Overall: corrective increment complete; shared-foundation milestone proved with published Koan
+  dependencies. The independent application-evolution research remains planned.
 - Published increment: AE-12 insertion, AE-13 enum names and AE-14 additive collection construction reached NuGet.org through release 34411628984 at `7ceb16c9f`. Gposingway verified all 33 app and 35 test Koan dependencies against that public plan; its four enum/body-binding failures now pass.
-- Active increment: AE-15 keyed lease lifetime, AE-16 typed PATCH restoration, AE-17 ordered cache removal and AE-18 claimed gate state. AE-15 (`10bd1a5b6`), AE-16 (`dfe9291f7`) and AE-18 (`423d1ad93`) are reviewed local commits with focused receipts. AE-17 passed independent review and all 82 Cache topology cases. Dependency stamping, repository coherence and normal public release are next. Gposingway owns its separate runtime acceptance ledger.
+- Latest published increment: AE-15 keyed lease lifetime, AE-16 typed PATCH restoration, AE-17 ordered cache removal and AE-18 claimed gate state. All passed independent review and owner tests. Six dependency stamp commits settled at `4890ca83c`; all eight coherence legs passed, with the same 21 existing build warning lines and none added. Release 34421172932 published 99 new packages. Gposingway restored the exact plan, verified all 33 app and 35 test package origins at NuGet.org, and passed all six HTTP write-policy cases, including the three prior PATCH failures. Its routing and facet freshness acceptance is recorded in the consumer completion below.
+- Consumer completion: Gposingway completed its final 1,228 backend and 24 frontend checks, copied-data
+  compatibility and existing-container journeys, then deployed the public-package candidate. Its
+  [deployment receipt](https://github.com/gposingway/gposingway-org/blob/dev/docs/deployments/2026-09-10-meaningful-capabilities.md)
+  records bounded live proof. Routing, facet freshness, field disclosure, insertion and conditional
+  publication acceptance are complete within those recorded contracts. Earlier work-item receipts
+  remain dated evidence rather than current publication status.
 - Independent participants: none recruited; results and productivity measurements unavailable.
 
 ## Work ledger
@@ -35,18 +42,18 @@ with links to the actual deliverable and evidence.
 | [AE-04 Change review](work-items/04-change-review.md) | planned | Requires changes and behavior evidence from AE-02 and AE-03 |
 | [AE-05 Incremental adoption](work-items/05-incremental-adoption.md) | planned | Requires AE-01's bounded feature/foundation |
 | [AE-06 Independent validation](work-items/06-independent-validation.md) | planned | Requires internal findings, a recorded pilot decision, and consenting participants |
-| [AE-07 Scoped insert safety](work-items/07-scoped-insert-safety.md) | in-progress | Atomic insert boundary and native provider proofs accepted locally; constrained bulk creates reject pending native mixed-write guarantees. Public-package consumer validation remains open. |
-| [AE-08 Counterpart query authority](work-items/08-counterpart-query-authority.md) | in-progress | 220 focused checks, independent source acceptance and repository coherence pass. Published through release 34390309739; full public-package application acceptance remains open. |
-| [AE-09 Build dependency security](work-items/09-build-dependency-security.md) | in-progress | SourceLink pin selects patched Git build tasks; forced audit restore and focused build pass with zero warnings/errors. Included in the subsequent public releases; application acceptance remains separate. |
-| [AE-10 Conditional field access](work-items/10-field-access.md) | in-progress | One property Access owner across typed MVC/shared Entity/MCP; 132 focused checks and independent source acceptance. Published through 34400186238; discovery correction published through 34406712072. Public application acceptance remains. |
-| [AE-11 Conditional publication](work-items/11-conditional-publication.md) | in-progress | Normalized Filter primitive and sole Entity ReplaceIf verb; 86 focused tests, independent review and coherence pass. Release 34406712072 published 87 packages; public application acceptance remains. |
-| [AE-12 Entity insertion](work-items/12-entity-insertion.md) | in-progress | 36 focused cases, review and coherence pass. Published through 34411628984; public Gposingway translation consumes Insert, with remaining business race checks tracked there. |
+| [AE-07 Scoped insert safety](work-items/07-scoped-insert-safety.md) | done | Atomic insert boundary and native provider proofs accepted locally; constrained bulk creates reject pending native mixed-write guarantees. Published-package consumer insertion and suppression checks pass; broader authorization limits remain explicit. |
+| [AE-08 Counterpart query authority](work-items/08-counterpart-query-authority.md) | done | 220 focused checks, independent source acceptance and repository coherence pass. Published through release 34390309739; published-package filter and counterpart journeys pass. |
+| [AE-09 Build dependency security](work-items/09-build-dependency-security.md) | done | SourceLink pin selects patched Git build tasks; forced audit restore and focused build pass with zero warnings/errors. Included in the subsequent public releases; the final public-package application build and certification pass with recorded pre-existing warnings. |
+| [AE-10 Conditional field access](work-items/10-field-access.md) | done | One property Access owner across typed MVC/shared Entity/MCP; 132 focused checks and independent source acceptance. Published through 34400186238; discovery correction published through 34406712072. Public-package application access and publication journeys pass within the recorded limits. |
+| [AE-11 Conditional publication](work-items/11-conditional-publication.md) | done | Normalized Filter primitive and sole Entity ReplaceIf verb; 86 focused tests, independent review and coherence pass. Release 34406712072 published 87 packages; public-package guarded publication and cooperative restart acceptance pass within the recorded consumer limits. |
+| [AE-12 Entity insertion](work-items/12-entity-insertion.md) | done | 36 focused cases, review and coherence pass. Published through 34411628984; public Gposingway translation consumes Insert, with completed conditional-publication and cooperative restart checks recorded by that consumer. |
 | [AE-13 MCP enum names](work-items/13-mcp-enum-wire.md) | done | One enum output convention; legacy numeric input retained. 58 focused MCP checks, review, release 34411628984 and public consumer enum regression pass. |
 | [AE-14 Additive JSON collections](work-items/14-additive-json-collections.md) | done | Shared Core.Json construction; 68 Web and six Data checks, including custom reader preservation. Review, release 34411628984 and public consumer admin body regressions pass. |
-| [AE-15 Keyed lease lifetime](work-items/15-keyed-lease-gate.md) | in-progress | One short accounting lock replaces racy detached gate retirement. Eight tests pass after reproduced overlap; reviewed local commit 10bd1a5b6 awaits publication. |
-| [AE-16 Typed PATCH](work-items/16-typed-patch-restoration.md) | in-progress | Typed copy restoration, recursive writable admission, explicit null defaults and exact dictionary keys. 139 Web, 32 Data, 14 PatchOps, 95 in-memory, 59 JSON and five Canon controls pass. Reviewed local commit dfe9291f7 awaits publication and three public GW PATCH regressions. |
-| [AE-17 Ordered cache removal](work-items/17-ordered-cache-removal.md) | in-progress | Existing gate orders removal with fills and backfills; all started tier writes settle before failure escapes. Seven ordering cases and all 82 owner cases pass, with independent review. Public consumption and application freshness remain separate. |
-| [AE-18 Claimed job gate](work-items/18-job-claimed-gate-state.md) | in-progress | Optional immutable JobState.GateKey exposes existing claim without ledger reads. Nine in-memory and four Mongo cases pass; reviewed local commit 423d1ad93 awaits publication. |
+| [AE-15 Keyed lease lifetime](work-items/15-keyed-lease-gate.md) | done | One short accounting lock replaces racy detached gate retirement. Eight tests pass after reproduced overlap; independent review, release 34421172932 and public package adoption pass. |
+| [AE-16 Typed PATCH](work-items/16-typed-patch-restoration.md) | done | Typed copy restoration, recursive writable admission, explicit null defaults and exact dictionary keys. 139 Web, 32 Data, 14 PatchOps, 95 in-memory, 59 JSON and five Canon controls pass. Independent review, release 34421172932 and all three formerly failing public GW PATCH cases pass. The [internal public consumer exercise](evidence/AE-16-consumer.md) adds 192 verifier checks, including 24 PATCH checks, with reviewed provenance. |
+| [AE-17 Ordered cache removal](work-items/17-ordered-cache-removal.md) | done | Existing gate orders removal with fills and backfills; all started tier writes settle before failure escapes. Seven ordering and all 82 owner cases pass, with independent review. Published in release 34421172932 and restored from NuGet.org; all fifteen application facet-cache controls and its final acceptance pass. |
+| [AE-18 Claimed job gate](work-items/18-job-claimed-gate-state.md) | done | Optional immutable JobState.GateKey exposes existing claim without ledger reads. Nine in-memory and four Mongo cases pass; independent review, release 34421172932 and public package adoption pass. Gposingway routing and cooperative host-replacement acceptance pass. |
 
 Use `in-progress`, `blocked`, `done`, or `stopped` as execution proceeds. A blocker names the
 missing input and useful restart point; stopped work retains its findings. Front matter in

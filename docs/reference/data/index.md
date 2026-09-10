@@ -4,7 +4,7 @@ domain: data
 title: "Persist and query business state"
 audience: [developers, architects, ai-agents]
 status: current
-last_updated: 2026-08-30
+last_updated: 2026-09-10
 framework_version: v1.0.0
 validation:
   date_last_tested: 2026-08-06
@@ -68,12 +68,28 @@ generated REST controllers, and generated MCP tools.
 | One UI or API page | `Todo.FirstPage(size, ct)` or `Todo.Page(number, size, ct)` | Caller supplies the bound |
 | A large sequential workload | `Todo.AllStream(...)` or `Todo.QueryStream(...)` | Only on a provider that proves bounded paging |
 | Create or update | `entity.Save(ct)` | One logical write |
+| Create without replacing an existing identity | `entity.Insert(ct: ct)` | Qualified native insertion; conflict leaves the stored row unchanged |
+| Replace the revision the caller observed | `entity.ReplaceIf(stored => stored.Revision == expected, ct: ct)` | Qualified native conditional replacement; never creates a missing row |
 | Delete | `entity.Remove(ct)` | One logical removal |
 | A finite batch | `Todo.UpsertMany(items, ct)` | Atomicity depends on the provider capability |
 
 Use `Entity<T, TKey>` when the identifier is not the default string key. The lower-level
 `Data<TEntity, TKey>` facade, direct provider instructions, and raw access are expert escape hatches,
 not an application architecture requirement.
+
+## Preserve representation and write intent
+
+Managed Entity documents preserve enum names as strings, including declared aliases and supported
+flags combinations. Queries use the same representation; unsupported native ordering refuses rather
+than sorting the names as if they were numeric values. Typed restoration preserves collection
+contents and private stored state without granting an HTTP caller permission to write those members.
+
+Use `Insert` for create-only intent and `ReplaceIf` for a captured destination revision. Unsupported
+provider or scope combinations refuse instead of falling back to a read followed by an unguarded
+save. These operations protect the destination identity; they do not make a separate source read
+atomic with its write. See the [Data contract](../../../src/Koan.Data.Core/README.md) for receipts,
+supported providers, deferred route restoration, and completion-failure limits, and the
+[PATCH guide](../../guides/patch-capabilities-howto.md) for partial HTTP updates.
 
 ## Keep a polymorphic family in one set
 

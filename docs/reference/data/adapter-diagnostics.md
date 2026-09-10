@@ -4,7 +4,7 @@ domain: data
 title: "Data adapter diagnostics and readiness"
 audience: [developers, architects, ai-agents]
 status: current
-last_updated: 2026-07-17
+last_updated: 2026-09-10
 framework_version: v1.0.0
 validation:
   date_last_tested: 2026-07-17
@@ -41,6 +41,13 @@ An available but unused provider reports non-critical `Unknown` health and must 
 initialize an external service. Once participating, it is critical and its selected physical routes are probed.
 
 ## One route decision
+
+MongoDB resolves declared indexes through the physical collection's readiness gate. An unnamed
+declaration can adopt an existing equivalent index while retaining its physical name; conflicting explicit names
+and incompatible constraints require deliberate operator action. Resolution is cached and shared by
+concurrent callers, with a failed initialization eligible for retry. Ordinary reads do not repeat the
+index inventory. The [Mongo contract](../../../src/Connectors/Data/Mongo/TECHNICAL.md) owns exact
+equivalence rules and uniqueness diagnostics; adoption never drops or renames an index.
 
 The adapter factory owns physical route construction. Repository creation and health use the same provider/source
 resolution, including exact connection, database/bucket, credentials, and source deduplication. A repository is cached

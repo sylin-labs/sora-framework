@@ -72,10 +72,11 @@ context, facts, provider-catalog, and build-target contracts.
 
 ## Background-service configuration
 
-AddKoan binds Koan:BackgroundServices to KoanBackgroundServiceOptions. Enabled=false prevents the
-orchestrator from executing child services; Services:<service-name>:Enabled controls an individual child.
-StartupTimeoutSeconds and FailFastOnStartupFailure use the same bound options. The directly resolved
-orchestrator and the hosted-service instance are the same singleton. Previously ignored settings now take effect.
+One host composes one background-service orchestrator. AddKoan binds `Koan:BackgroundServices` to
+`KoanBackgroundServiceOptions`: `Enabled=false` prevents the orchestrator from executing child services,
+`Services:<service-name>:Enabled` controls an individual child, and `StartupTimeoutSeconds` and
+`FailFastOnStartupFailure` read the same bound options. The orchestrator is registered once as a
+singleton; the hosted-service instance and a directly resolved instance are the same object.
 
 ## Shared JSON collection construction
 

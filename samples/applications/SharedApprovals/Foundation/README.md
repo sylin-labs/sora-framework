@@ -22,7 +22,7 @@ Run the workspace's `verify.ps1` for the local package update and rollback exper
 come from NBGV history in its isolated fixture. The package's docs are included with its binaries
 so consuming developers and coding agents receive the matching extension instructions.
 The referenced capabilities bring the ordinary-foundation identity repair in published Core
-1.0.34 through their dependency floors. No local Koan build is required.
+1.0.38 through their dependency floors. No local Koan build is required.
 
 This sample supplies business policy, not production authentication, authorization, tenant
 isolation, payment processing, or procurement integrations. Its local development MCP exposure

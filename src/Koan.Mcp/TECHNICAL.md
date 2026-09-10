@@ -75,7 +75,7 @@ HTTP on the single `HttpRoute` (`/mcp` by default): client JSON-RPC, including `
 The initialize response mints `Mcp-Session-Id`, which the client echoes with the negotiated
 `MCP-Protocol-Version` on subsequent requests.
 
-`EnableLegacySseTransport` separately opts into the deprecated `/mcp/sse` plus `/mcp/rpc` shape.
+`EnableLegacySseTransport` separately opts into the earlier `/mcp/sse` plus `/mcp/rpc` shape.
 Both HTTP shapes delegate to the same dispatcher, session, authorization, and projection core.
 Transport choices are host-level options; every enabled edge projects the same governed capability
 surface. Application-owned inputs, Entity results, custom-tool results, and Code Mode objects share
@@ -84,8 +84,8 @@ one camelCase JSON contract while protocol envelopes retain their specification-
 The standard typed application serializer writes enums as member-name strings, including nested
 entities, terminal summaries, relationship graphs, custom-tool results and mutation deltas. Code
 Mode's existing JSON facade uses the same output converter. Unnamed enum values fail serialization
-instead of emitting a number. The converter applies only to writes: legacy Newtonsoft numeric enum
-input remains accepted where existing schema/admission permits it. It does not reinterpret numbers
+instead of emitting a number. The converter applies only to writes: Newtonsoft numeric enum
+input remains accepted where existing schema and admission rules permit it. It does not reinterpret numbers
 inside prebuilt JSON or strings, and explicit application converters retain their own contract.
 Conditional field access and stronger MCP exclusions still apply before values reach this serializer.
 
@@ -95,11 +95,12 @@ Conditional field access and stronger MCP exclusions still apply before values r
 - ARCH-0111: `/docs/decisions/ARCH-0111-unified-runtime-facts.md`
 - MCP conformance suite: `/tests/Suites/Mcp/Koan.Mcp.Conformance.Tests/`
 
-## Transport configuration migration
+## Transport options validation
 
-The retired `Koan:Mcp:EnableHttpSseTransport` key fails options validation at startup. Remove it and
-configure `EnableStreamableHttpTransport`. To retain clients using `/mcp/sse` and `/mcp/rpc`, also set
-`EnableLegacySseTransport` explicitly. No transport is enabled implicitly from the retired key.
+Transport enablement is validated at startup. The retired `Koan:Mcp:EnableHttpSseTransport` key fails
+options validation with a correction naming `EnableStreamableHttpTransport` and
+`EnableLegacySseTransport`; no transport is enabled implicitly by an unrecognized key.
+
 ## Rejected mutation deltas
 
 MutationDeltaProjector returns no delta for a short-circuited endpoint result, even if a before-state

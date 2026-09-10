@@ -4,7 +4,7 @@ domain: mcp
 title: "MCP over HTTP"
 audience: [developers, architects, ai-agents]
 status: current
-last_updated: 2026-07-19
+last_updated: 2026-09-10
 framework_version: v1.0.0
 validation:
   date_last_tested: 2026-07-19
@@ -193,7 +193,7 @@ See [OAuth server](oauth-server-howto.md) for token acquisition and
 |---|---:|---|
 | `EnableStdioTransport` | `true` | Host the local process-owned transport |
 | `EnableStreamableHttpTransport` | `false` | Host the primary Streamable HTTP edge |
-| `EnableLegacySseTransport` | `false` | Host the deprecated `/sse` + `/rpc` compatibility edge |
+| `EnableLegacySseTransport` | `false` | Host the earlier `/sse` + `/rpc` two-endpoint edge for clients that use it |
 | `HttpRoute` | `/mcp` | Shared base route for MCP over HTTP |
 | `RequireAuthentication` | environment-derived | Require a remote authenticated principal |
 | `ResourceUri` | unset | Fixed OAuth resource/audience identifier |

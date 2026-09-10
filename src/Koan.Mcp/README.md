@@ -58,7 +58,7 @@ Koan Web, declare the intent in configuration:
 }
 ```
 
-The deprecated two-endpoint SSE transport remains off unless
+An earlier two-endpoint SSE transport (`GET /mcp/sse` plus `POST /mcp/rpc`) stays off unless
 `EnableLegacySseTransport` is explicitly enabled.
 
 ## Streamable HTTP
@@ -76,8 +76,8 @@ The first `POST /mcp` carries `initialize` without a session header. Its respons
 `MCP-Protocol-Version`. A normal MCP client performs this negotiation—application developers do not
 write JSON-RPC handlers.
 
-The old `GET /mcp/sse` plus `POST /mcp/rpc` shape exists only when the deprecated legacy transport
-is explicitly enabled.
+The `EnableLegacySseTransport` option exposes the earlier `GET /mcp/sse` plus `POST /mcp/rpc` shape
+as well; both HTTP shapes share the same dispatcher, session, authorization, and projection core.
 
 ## Governance
 
@@ -132,7 +132,11 @@ produce startup warnings; add `[McpDescription]` only when richer agent guidance
 - Code Mode executes Jint JavaScript under bounded CPU, memory, recursion, code-length, and SDK-call controls. It is
   not an operating-system sandbox and exposes only the Koan SDK bindings supplied by the package.
 - Session limits, resumable stream state, and dry-run projection do not provide exactly-once effects, distributed
-  session durability, or rollback for arbitrary custom-tool side effects.
+  session durability, or rollback for arbitrary custom-tool side effects. Sessions are process-owned; a distributed
+  deployment must route a session consistently or re-initialize after it moves.
+- Rejected entity mutations carry no state delta. Constrained Create uses the same atomic insertion
+  boundary as REST; a dry-run previews caller-visible intent without reserving an identity or proving
+  that a later insertion will succeed.
 - Typed field protection does not track values copied into unannotated DTOs, prebuilt JSON, or strings.
   Unprepared governed polymorphic values and unsupported converters refuse before a typed payload is returned.
   Context-free Code Mode JSON conversion accepts projected JSON and refuses CLR contracts requiring field authority.
@@ -151,11 +155,9 @@ See [TECHNICAL.md](TECHNICAL.md) for composition and transport details.
 
 Model Context Protocol integration for Koan entity endpoints: discovery, schema, execution, and transports.
 
-## Transport configuration migration
+## Transport options
 
-The retired `Koan:Mcp:EnableHttpSseTransport` key fails options validation at startup. Remove it and
-configure `EnableStreamableHttpTransport`. To retain clients using `/mcp/sse` and `/mcp/rpc`, also set
-`EnableLegacySseTransport` explicitly. No transport is enabled implicitly from the retired key.
-Rejected entity mutations carry no state delta. Constrained Create uses the same atomic insertion
-boundary as REST; a dry-run previews caller-visible intent without reserving an identity or proving
-that a later insertion will succeed.
+`EnableStreamableHttpTransport` enables the Streamable HTTP edge; `EnableLegacySseTransport`
+additionally exposes the earlier two-endpoint shape for clients that use it. Transport enablement is
+validated at startup: the retired `Koan:Mcp:EnableHttpSseTransport` key fails options validation with
+a correction naming the current keys, and no transport is enabled implicitly by any other setting.

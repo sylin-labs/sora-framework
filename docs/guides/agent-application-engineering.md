@@ -4,7 +4,7 @@ domain: framework
 title: "Engineer a Koan application with an agent"
 audience: [developers, architects, ai-agents]
 status: current
-last_updated: 2026-07-23
+last_updated: 2026-09-10
 framework_version: v1.0.0
 validation:
   date_last_tested: 2026-07-23
@@ -79,6 +79,38 @@ Do not hide the gap behind application infrastructure.
 Use a real provider boundary when claiming provider behavior. Do not run the entire framework to
 prove one application capability.
 
+## Design authority and derived state
+
+Separate permission to read a row, eligibility for a public listing, and disclosure of its fields.
+Those are business decisions even when they share an Access declaration. A hidden row is not a
+missing identity when deciding whether a write may insert. Exercise the real HTTP or MCP body and
+stored result; a policy-predicate test alone cannot expose serializer or transport bypasses.
+
+Use the Entity document semantics when restoring a typed update. HTTP writable-member admission
+still applies before restoration; persistence's ability to hydrate private state is not permission
+for a caller to write it. Preserve string enums, collection contents and dictionary keys across the
+actual transport and provider path instead of adding an application serializer for each surface.
+See [Entity lifecycle](../reference/data/entity-lifecycle.md) and
+[typed PATCH](patch-capabilities-howto.md) for the owning contracts.
+
+For delayed work, retain the business identity and reload the authority needed when forming the
+result. A queued hint or previously rendered payload is not current permission. A destination
+revision checked by `ReplaceIf` protects that destination; it does not make a separate source read
+atomic with the write. Reconciliation can repair current state but cannot replay intermediate events
+that were never retained. Keep those distinctions in the business contract.
+Use [Jobs](../reference/jobs/index.md) for durable execution and its captured work route;
+keep current business authority in the application action.
+
+Prefer removing derived state when a fresh read supplies the required behavior at an acceptable
+cost. If caching remains useful, state expiry and invalidation ordering separately. Ordinary Cache
+owns storage, TTL and keyed coalescing; the application owns which source and audience the value
+represents. A successful removal is not a claim that previously returned bytes can be revoked.
+Read the [Cache contract](../reference/data/cache.md) before selecting a consistency boundary.
+
+An interrupted business operation often needs a small checkpoint on its existing Entity, not a new
+workflow engine. A retry must still honor current business exclusions and ownership before using a
+reserved identity. Preserve normal lifecycle effects and prove them at the successful insert boundary.
+
 ## Retrieval order
 
 Read only as far as needed:
@@ -95,6 +127,7 @@ package authority.
 
 ## Handoff
 
-Leave the next engineer a short table: intent, old owner, new owner, proof, remaining risk. Record
-framework gaps separately from application work. Never copy private names, paths, URLs, data, or
+Leave the next engineer a short table: intent, owning capability, proof, remaining limit. For a
+migration, also name the superseded owner and what was removed. Record framework gaps separately
+from application work. Never copy private names, paths, URLs, data, or
 recognizable workflows into public framework artifacts; reduce them to anonymous reproductions.

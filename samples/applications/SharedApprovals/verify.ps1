@@ -213,6 +213,25 @@ function Test-Application([string]$App, [string]$Phase, [string]$Version, [decim
         $denied = Json-Request $base $route 'POST' $invalid @(409)
         Check ($denied.code -eq 'approval.invalid-request') "$Phase-$App-positive-amount-required"
 
+        if (-not $isPurchase) {
+            $patchExpense = Json-Request $base $route 'POST' $body @(200, 201)
+            $patchBody = @{ subject = "$Phase corrected travel"; amount = 300 }
+            $null = Json-Request $base "$route/$($patchExpense.id)" 'PATCH' $patchBody @(200)
+            $patched = Json-Request $base "$route/$($patchExpense.id)"
+            Check ($patched.id -eq $patchExpense.id) "$Phase-$App-pending-patch-keeps-identity"
+            Check ($patched.subject -eq "$Phase corrected travel" -and $patched.amount -eq 300) "$Phase-$App-pending-patch-applies-subject-and-amount"
+            Check ($patched.employee -eq 'Example colleague' -and $patched.receiptNumber -eq 'R-1042') "$Phase-$App-pending-patch-preserves-omitted-fields"
+            Check (-not $patched['reimbursedAt']) "$Phase-$App-pending-patch-leaves-reimbursement-null"
+            Check ($patched.state -eq 'Pending') "$Phase-$App-pending-patch-stays-pending"
+            $null = Json-Request $base "$route/$($patchExpense.id)/approve" 'POST'
+            $deniedPatch = @{ subject = "$Phase late correction"; amount = 320 }
+            $denied = Json-Request $base "$route/$($patchExpense.id)" 'PATCH' $deniedPatch @(409)
+            Check ($denied.code -eq 'approval.already-approved') "$Phase-$App-approved-patch-rejected"
+            Check (-not [string]::IsNullOrWhiteSpace([string]$denied.detail)) "$Phase-$App-approved-patch-explains-correction"
+            $retained = Json-Request $base "$route/$($patchExpense.id)"
+            Check ($retained.id -eq $patchExpense.id -and $retained.subject -eq "$Phase corrected travel" -and $retained.amount -eq 300 -and $retained.employee -eq 'Example colleague' -and $retained.receiptNumber -eq 'R-1042' -and -not $retained['reimbursedAt'] -and $retained.state -eq 'Approved') "$Phase-$App-approved-patch-did-not-persist"
+        }
+
         $highBody = $body.Clone(); $highBody.amount = 750
         $high = Json-Request $base $route 'POST' $highBody @(200, 201)
         if ($Maximum -lt 750) {

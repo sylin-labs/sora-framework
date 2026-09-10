@@ -4,7 +4,7 @@ domain: web
 title: "Authentication Setup with Koan"
 audience: [developers, security-engineers, ai-agents]
 status: current
-last_updated: 2026-07-18
+last_updated: 2026-09-10
 framework_version: v1.0.0
 validation:
   date_last_tested: 2026-07-18
@@ -171,8 +171,12 @@ public sealed class Article : Entity<Article>
 public sealed class ArticlesController : EntityController<Article>;
 ```
 
-External roles map to `ClaimTypes.Role`; permissions from the local simulator map to `Koan.permission`. Row-level
-ownership and agent grants are authorization concerns, introduced by [Identity and isolation](../reference/identity/index.md).
+External roles map to `ClaimTypes.Role`; permissions from the local simulator map to `Koan.permission`. Koan maps
+these claims but does not define or normalize a role vocabulary: a role means what the application's authorization
+declares, and refreshing application-owned roles happens in an `IKoanAuthFlowHandler` at sign-in and
+cookie-principal validation. Bearer tokens use their separate validation scheme. Row-level ownership
+and agent grants are authorization concerns, introduced by
+[Identity and isolation](../reference/identity/index.md).
 
 ## Built-in application endpoints
 

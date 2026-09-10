@@ -35,8 +35,8 @@ Each host calls `AddKoan()` once. A business Entity inherits the shared contract
 inherits the approval operation, and its module binds shared lifecycle policy before adding its
 own rules. Consumer code never repeats the approval limit or provider registration.
 
-The foundation references published Koan App 1.0.23, SQLite connector 1.0.30, and MCP 1.0.29.
-Their dependency floors bring Core 1.0.34, which supports ordinary foundation package identities.
+The foundation references published Koan App 1.0.53, SQLite connector 1.0.61, and MCP 1.0.65.
+Their dependency floors bring Core 1.0.38, which supports ordinary foundation package identities.
 Workspace build files isolate these ordinary package consumers from repository-only build inputs.
 Normal authoring uses a ProjectReference to the foundation; the verifier switches both consumers
 to its actual NuGet package, leaving their business source unchanged.

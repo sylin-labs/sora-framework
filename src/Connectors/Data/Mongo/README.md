@@ -29,8 +29,8 @@ identity cannot be replaced through that create path. Explicit mappings and cons
 creates currently reject before persistence. Ordinary Entity `Save` remains an upsert.
 Default numeric keys reject before insertion; assign a non-default identity for those Entity types.
 
-Existing equivalent indexes keep their names across framework upgrades when the model does not explicitly name
-them. Koan checks their constraints once per physical collection. Incompatible constraints or explicit names
+An unnamed index declaration is satisfied by an existing equivalent index, which keeps its own name.
+Koan checks equivalence once per physical collection. Incompatible constraints or conflicting explicit names
 require an operator migration; the connector never drops or renames an existing index automatically.
 
 ## Fit a legacy collection without changing the model
@@ -44,7 +44,7 @@ koan.Data.Source("Legacy").Map<Customer>(map => map
     .Property(customer => customer.Name.First).Path("NAME_DATA", "first"));
 ```
 
-The same Entity verbs now use those physical names. Mapped writes update only declared physical paths, so fields owned
+The same Entity verbs use those physical names. Mapped writes update only declared physical paths, so fields owned
 by the legacy system remain untouched. Composite keys use `.Key(...).Parts(...)`. Mark the source `External` to prevent
 collection creation, and `ReadOnly` to reject every mutation before provider I/O.
 
@@ -138,7 +138,8 @@ and declared EnumMember aliases. Unnamed numeric values fail instead of silently
 Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
-Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+Rows or columns that hold numeric enum values are not rewritten automatically; they require an explicit
+migration to the string representation.
 
 ## Same-ID counterpart queries
 
@@ -150,11 +151,11 @@ Even a true counterpart predicate excludes orphaned outer rows.
 Data binds both operands and their scopes before Mongo receives the query. Native identity-correlated lookup
 applies the complete Boolean predicate before count, ordering, and paging. Counterpart rows are never hydrated.
 Mapped storage, nested counterpart predicates, incompatible routes/identity shapes, and residual predicates reject.
-Row-only queries retain the existing Find/CountDocuments path.
+Row-only queries use the Find/CountDocuments path.
 
 Count and page use separate native commands with the same predicate plan. Concurrent changes can produce
 different committed observations between those commands; this support does not add snapshot consistency.
 
-Counterpart identity evidence is initially qualified for string, Guid, and the eight integral CLR
+Counterpart identity evidence is qualified for string, Guid, and the eight integral CLR
 key types. Mapped identities and other key types (including mutable byte[] keys) do not advertise
-SupportsSameIdIn and reject counterpart binding. Ordinary persistence support is unchanged.
+SupportsSameIdIn and reject counterpart binding. Other key types keep ordinary persistence support.

@@ -4,7 +4,7 @@ domain: data
 title: "Data"
 audience: [ai-agents, developers]
 status: current
-last_updated: 2026-08-23
+last_updated: 2026-09-10
 framework_version: v1.0.0
 validation:
   date_last_tested: 2026-08-23
@@ -31,6 +31,8 @@ keeps saying `Recipe` while everything underneath changes.
 | "backups / disaster recovery" | [backups](data/backups.md) |
 | "search by meaning" | [semantic search](ai/semantic-search.md) |
 | "what can an `Entity<T>` become?" - the full hook map | [Entity capability hooks](data/entities.md) |
+| "create only if absent, or replace only the revision I read" | [Data write contracts](../../src/Koan.Data.Core/README.md) |
+| "change a few fields and preserve the rest" | [PATCH an Entity](../guides/patch-capabilities-howto.md) |
 
 ## Standing constraints
 

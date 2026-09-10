@@ -225,7 +225,8 @@ and declared EnumMember aliases. Unnamed numeric values fail instead of silently
 Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
-Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+Rows or columns that hold numeric enum values are not rewritten automatically; they require an explicit
+migration to the string representation.
 ## Counterpart reads
 
 Use `Entity.AllWithCount(QueryDefinition.All.Where(Filter.SameIdIn<T>(policy, "")))`
@@ -257,6 +258,16 @@ Use a qualified connector and an ordinary persisted revision field. Unsupported 
 variants and active managed/read scopes refuse. BeforeUpsert may run on conflict; AfterUpsert runs
 only after success. A cancellation, cache error or lifecycle exception after dispatch does not imply
 rollback. This protects one destination row, not equality with another document at commit time.
+
+## Deferred transaction writes
+
+Operations enlisted in a Koan transaction are deferred, not executed inline. Each tracked write
+restores the source, adapter, and partition captured when it was enlisted; an explicitly selected
+default partition clears that axis instead of inheriting the commit caller's scope. Commit runs the
+tracked operations sequentially and returns a Task. A dispatched-operation failure carries a
+`TransactionException` with completed count, unknown commit outcome, and retry/replay dispositions.
+This is deferred coordination: it does not claim atomicity across stores, and
+executing a tracked operation suppresses the surrounding transaction to prevent recursive enlistment.
 
 ## Insert without replacement
 

@@ -4,7 +4,7 @@ title: Koan.Web - Technical Reference
 description: Contracts, configuration, and architecture for Koan’s ASP.NET Core integration.
 packages: [Sylin.Koan.Web]
 source: src/Koan.Web/
-last_updated: 2026-07-18
+last_updated: 2026-09-10
 ---
 
 ## What the reference composes
@@ -127,12 +127,11 @@ expansion no adapter can serve fails closed with `422`; a response past the safe
 
 ## Normalized read constraints and counterpart authority
 
-`IAccessFilter<T>`, `AccessFilter<T>` and `QueryOptions` carry one `Filter? Filter`. The former `Predicates`
-collections are removed, which is a source and binary API change. Use `q.Where(expression)` and
-`options.AddPredicate(expression)` for ordinary lambda ergonomics, or compose the normalized `Filter`
-directly. Supported captured values and collections are copied when contributed; the endpoint freezes
-the complete query after `BuildOptions`. An opaque CLR-only predicate retains ordinary fallback semantics
-and cannot be combined with a counterpart requirement.
+`IAccessFilter<T>`, `AccessFilter<T>` and `QueryOptions` carry one `Filter? Filter`. Use
+`q.Where(expression)` and `options.AddPredicate(expression)` for ordinary lambda ergonomics, or compose
+the normalized `Filter` directly. Supported captured values and collections are copied when
+contributed; the endpoint freezes the complete query after `BuildOptions`. An opaque CLR-only
+predicate retains ordinary fallback semantics and cannot be combined with a counterpart requirement.
 
 `q.Where(expression, partition: "")` lowers immediately to `Filter.SameIdIn<T>`: the same entity and ID
 must satisfy the predicate in the explicit default partition. `null` inherits the current partition.
@@ -193,13 +192,14 @@ still runs exactly once after user options even when an earlier options hook sho
 EntityEndpointService retains the visible before read for authorization and delta projection. A null
 does not prove physical absence: constrained creates call IInsertOnlyRepository on the Data facade
 resolved inside the requested set. Native collision returns 404 without success audit or AfterSave.
-Create-containing constrained bulk requests reject before any persistence until a native atomic mixed
-contract exists. The correction is shared by REST and MCP. No unfiltered prior-row read is introduced.
+Create-containing constrained bulk requests reject before any persistence; there is no atomic mixed
+bulk-create contract. The correction is shared by REST and MCP. Constrained creates never issue an
+unfiltered prior-row read.
 
 Mutation qualification uses the existing Create/Update AccessFilter predicates and HasStamps. A
 read-only access realization leaves writes unchanged. The insertion selector does not reevaluate gates
 or reinterpret the principal; existing coarse authorization, including server grants, remains authoritative.
-Owner-gate-only row enforcement is outside this insertion correction. No opt-out or policy registry exists.
+Owner-gate-only row enforcement is outside the insertion boundary. No opt-out or policy registry exists.
 
 ## Property access admission
 
@@ -256,10 +256,11 @@ and result preparation use that same builder for origin semantics. Final shape a
 BuildOptions, using the adapter's stronger exclusions when present.
 
 Partial JSON and JSON Merge Patch require whole-value write admission. JSON Patch is the supported
-selective field-edit protocol. The existing normalizer's empty-object omission and unescaped alias path
-behavior are separate Data findings, not repaired by this slice. No extra patch walker is introduced.
+selective field-edit protocol; patch-path parsing follows
+[PATCH normalization](https://github.com/sylin-org/koan-framework/blob/main/docs/api/patch-normalization.md)
+with its documented limits.
 
-## Typed merge/partial application (AE-16)
+## Typed merge/partial application
 
 `EntityEndpointService.Patch` applies JToken patches through the Data.Core typed applicators and
 assigns the returned working copy; the stored row is never edited in place. Applicator refusals
@@ -268,6 +269,13 @@ policy-rejected nulls, and non-convertible values) surface as a corrective 422 w
 message after `BeforePatch` and before stamps, `BeforeSave` and any save. Dry-run rehearsals project
 the restored copy and persist nothing. Field admission, row constraints, hooks, stamps and audit are
 unchanged; JSON Patch keeps its existing typed path.
+
+Typed application merges the Entity document's wire names and restores through the same serialization
+persistence reads. Enum values bind by member name; dictionary keys keep their exact spelling, and a
+null merge-patch dictionary entry removes the entry while a null merge-patch member takes the member's
+explicit CLR default. Admission only reaches members public code could assign: a private setter the
+restorer can write is not caller permission. Patching a position whose stored value is absent refuses
+when the declared member type is abstract or an interface; the caller cannot choose the runtime shape.
 
 AccessProjection's internal generic envelope retains the actual payload CLR type. Collection relationship
 responses retain RelationshipGraph<T> arrays. For that existing graph family alone, preparation obtains

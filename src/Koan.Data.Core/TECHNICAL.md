@@ -4,7 +4,7 @@ title: Koan.Data.Core - Technical Reference
 description: Contracts, options, design and operations for the Koan data core.
 packages: [Sylin.Koan.Data.Core]
 source: src/Koan.Data.Core/
-last_updated: 2026-07-27
+last_updated: 2026-09-10
 validation:
   date_last_tested: 2026-07-15
   status: reviewed
@@ -390,7 +390,8 @@ and declared EnumMember aliases. Unnamed numeric values fail instead of silently
 Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
-Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+Rows or columns that hold numeric enum values are not rewritten automatically; they require an explicit
+migration to the string representation.
 
 Entity JSON hydration replaces constructor-seeded members with stored collections. Additive domain collections
 with public parameterless constructors and Add(T) round-trip as arrays; a nonempty constructor also needs public

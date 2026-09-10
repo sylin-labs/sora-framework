@@ -50,7 +50,8 @@ look never becomes a write.
   (the pragma's rewritten table-function form parses its argument as a qualified name and rejects
   CLR-qualified/partition-suffixed storage names). Index inspection via `duckdb_indexes()`.
 - **Types**: document columns are `JSON`; BLOBs hydrate from the provider's `UnmanagedMemoryStream`;
-  `TimeSpan` stores as ticks (`BIGINT`) per DATA-0100; enums bind as their underlying number.
+  `TimeSpan` stores as ticks (`BIGINT`) per DATA-0100; enum values use their declared names in both
+  parameters and stored documents.
 
 ## Failure classification
 
@@ -82,7 +83,8 @@ and declared EnumMember aliases. Unnamed numeric values fail instead of silently
 Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
-Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+Rows or columns that hold numeric enum values are not rewritten automatically; they require an explicit
+migration to the string representation.
 
 AutoInstallExtensions and ExtensionDirectory bind from the provider section or its Engine subsection.
 With AutoInstallExtensions enabled, each declared extension is installed before LOAD; otherwise LOAD uses only

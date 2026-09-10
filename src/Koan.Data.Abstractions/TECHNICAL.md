@@ -4,7 +4,7 @@ title: Koan.Data.Abstractions - Technical Reference
 description: Provider-facing entity, query, result, and capability contracts.
 packages: [Sylin.Koan.Data.Abstractions]
 source: src/Koan.Data.Abstractions/
-last_updated: 2026-07-28
+last_updated: 2026-09-10
 validation:
   date_last_tested: 2026-07-15
   status: reviewed
@@ -161,7 +161,8 @@ and declared EnumMember aliases. Unnamed numeric values fail instead of silently
 Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
-Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+Rows or columns that hold numeric enum values are not rewritten automatically; they require an explicit
+migration to the string representation.
 ## Atomic insertion contract
 
 `IInsertOnlyRepository<TEntity,TKey>.Insert` requires native physical identity uniqueness. Success
@@ -188,13 +189,14 @@ including the default Newtonsoft.Json contract. It must not be exposed as applic
 
 ## Conditional write guard
 
-IConditionalWriteRepository.ConditionalReplaceAsync now accepts the existing normalized Filter,
-not an Expression. This intentional low-level interface change removes adapter-local late lambda
-capture; existing low-level callers use LinqFilterCompiler.Compile explicitly. Required Entity
+IConditionalWriteRepository.ConditionalReplaceAsync accepts the normalized Filter, not an
+Expression. The low-level seam carries no adapter-local lambda capture; low-level callers compile
+expressions with LinqFilterCompiler.Compile explicitly. Required Entity
 ReplaceIf intent has no read-then-save fallback. Strict snapshot, complete native support and row-only
 qualification belong to Data admission. Binary atoms are copied; unsupported opaque atoms refuse.
 
-Document CAS implementations using the existing CLR evaluator call CompileConditional. That bounded
+Document CAS implementations using the CLR evaluator call CompileConditional. That bounded
 entrypoint rejects managed, binary and DateTime fields rather than claiming unproved comparison
-semantics. The ordinary query evaluator remains unchanged. A bool cannot describe a postcommit
+semantics. The ordinary query evaluator accepts the same expressions it always accepts for queries
+and is not a conditional-write path. A bool cannot describe a postcommit
 exception: native acknowledgement failure, cancellation and completion errors propagate.

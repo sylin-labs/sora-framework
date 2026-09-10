@@ -4,7 +4,7 @@ title: Koan.Data.Connector.Mongo - Technical Reference
 description: MongoDB gold-reference adapter for Koan Data.
 packages: [Sylin.Koan.Data.Connector.Mongo]
 source: src/Connectors/Data/Mongo/
-last_updated: 2026-07-29
+last_updated: 2026-09-10
 ---
 
 ## Contract
@@ -24,8 +24,8 @@ stored with `_id` as the physical identity. Camel-case member names and Koan's p
 adapter decisions. `DateTime` and `DateTimeOffset` are normalized to UTC BSON dates; `TimeSpan`, `DateOnly`, and
 `TimeOnly` use comparable deterministic encodings.
 Typed Json.NET tokens flow directly into BSON without reparsing JSON text, retaining CLR integer widths,
-decimal precision and binary token identity. Legacy numeric widths remain readable when values fit the model.
-The read path likewise hydrates from typed tokens. Nested JSON documents retain native dates, binary and
+decimal precision and binary token identity. Stored integer widths need not match the model exactly;
+hydration succeeds whenever the value fits. The read path likewise hydrates from typed tokens. Nested JSON documents retain native dates, binary and
 representable decimal values through replacement writes. URI values preserve their original escaped strings.
 
 An explicit `MappingPlan` replaces naming conventions with compiled physical bindings. Reads hydrate through those
@@ -46,9 +46,9 @@ unique-key violations are not converted to identity conflicts. Concurrent duplic
 the server instead of a match receipt, remain failures rather than guessed commit outcomes.
 
 Explicit mappings do not advertise this capability and reject insert-only execution, since their identity fields
-do not necessarily have a native unique index. Ordinary `Save` and mapped upsert behavior remain unchanged.
-Constrained bulk requests containing create-classified items reject before persistence. This contract does not
-close the separate race between authorization of an existing row and its subsequent ordinary update.
+do not necessarily have a native unique index. Ordinary `Save` remains an upsert for both managed and mapped
+storage. Constrained bulk requests containing create-classified items reject before persistence. This contract does
+not close the separate race between authorization of an existing row and its subsequent ordinary update.
 
 `MongoQueryCompiler` lowers the declared filter floor, nested canonical paths, exact sort prefixes, explicit pages,
 and counts to driver definitions over physical BSON names. Unsupported CLR residuals do not enter the repository.
@@ -70,10 +70,10 @@ plans both lower their index paths through the same physical decisions used by r
 MongoDB's native zero-second expiry index.
 
 For unnamed declarations, an existing index satisfies the declaration when ordered keys, uniqueness, TTL,
-collation (including collection defaults), coverage and visibility agree. Its historical name is retained.
-Explicit names must match. Incompatible definitions fail with guidance to perform an explicit migration;
+collation (including collection defaults), coverage and visibility agree. The existing index keeps its own
+name. Explicit names must match. Incompatible definitions fail with guidance to perform an explicit migration;
 Koan never drops or renames them automatically. Only missing indexes are created. Resolution and names are
-cached in the existing repository/physical-collection readiness gate, shared by concurrent callers and retried
+cached in the repository's per-physical-collection readiness gate, shared by concurrent callers and retried
 after failure. Reuse is reported at Debug level once during initialization, without further index I/O on reads.
 
 Duplicate business-key violations retain the Mongo driver error. A duplicate is described as a cross-scope
@@ -138,7 +138,8 @@ and declared EnumMember aliases. Unnamed numeric values fail instead of silently
 Queries use the same spelling. Ordinary enum ordering uses declared ordinal ranks in native expressions while
 the stored value stays a string; native ordering of arbitrary Flags combinations rejects correctively.
 An explicit external mapping codec remains responsible for its declared physical representation.
-Existing numeric rows or columns require a separate, explicit migration; upgrades do not rewrite them automatically.
+Rows or columns that hold numeric enum values are not rewritten automatically; they require an explicit
+migration to the string representation.
 
 ## Counterpart execution
 
@@ -165,13 +166,13 @@ The adapter retains separate count/page commands and makes no cross-command snap
 search and ordering, Boolean composition, source-member collisions with computed ordering, rejection, committed
 authority changes, cancellation, concurrent partition binding, and native command/lookup receipts on isolated data.
 Native explain confirms a keyed query examines one indexed outer document and one indexed counterpart document.
-A load-hook identity-substitution regression covers both direct Data and facade query results.
+A load-hook identity-substitution spec covers both direct Data and facade query results.
 `MongoCounterpartScopeSpec` covers legacy managed equality, target read contributors, same-ID tenant separation,
 null/unscoped binding changes, multiple targets, and operation-local evidence invalidation.
 
-Counterpart identity evidence is initially qualified for string, Guid, and the eight integral CLR
+Counterpart identity evidence is qualified for string, Guid, and the eight integral CLR
 key types. Mapped identities and other key types (including mutable byte[] keys) do not advertise
-SupportsSameIdIn and reject counterpart binding. Ordinary persistence support is unchanged.
+SupportsSameIdIn and reject counterpart binding. Other key types keep ordinary persistence support.
 
 Conditional replacement consumes a normalized Filter and performs one acknowledged native `_id`
 ReplaceOne. Explicit mapped keys do not advertise this capability and refuse before store access:

@@ -56,4 +56,11 @@ original, and `CardImage.Url(...)` preserves an external URL. This package compo
 
 See the [OpenGraph guide](../../docs/guides/opengraph-howto.md) and [technical contract](TECHNICAL.md).
 
-Controller endpoints retain their response and authorization semantics. Automatic shell injection passes them through. Controllers may call `IOpenGraphCardRenderer.RenderShellAsync(Request, ct)` after their business visibility checks; SPA fallback navigation remains automatic.
+Automatic injection runs at the post-authorization Web pipeline boundary and only for navigations no
+controller route claimed. Controller endpoints retain their response and authorization semantics: a
+controller result, including its errors and 404s, passes through untouched. Controllers may call
+`IOpenGraphCardRenderer.RenderShellAsync(Request, ct)` after their business visibility checks; SPA
+fallback navigation remains automatic. Automatic injection is appropriate for content the application
+permits to be public. Card resolvers are application-supplied, and a cached card bypasses resolution;
+cards do not revalidate row or member Access. Check visibility before calling the renderer for governed
+content, and keep the card's fields appropriate for the audience receiving it.
