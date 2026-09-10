@@ -3,6 +3,7 @@ using Koan.Cache.Abstractions.Primitives;
 using Koan.Cache.Abstractions.Stores;
 using Koan.Core;
 using Koan.Core.Capabilities;
+using Koan.Core.Hosting.App;
 using Koan.Data.Abstractions;
 using Koan.Data.Abstractions.Capabilities;
 using Koan.Data.Abstractions.Filtering;
@@ -22,6 +23,7 @@ public sealed class ConditionalPublicationCacheSpec
     {
         await using var host = await KoanIntegrationHost.Configure()
             .ConfigureServices(services => services.AddKoan()).StartAsync(TestContext.Current.CancellationToken);
+        using var appScope = AppHost.PushScope(host.Services);
         using var route = EntityContext.With(adapter: "inmemory", partition: Guid.NewGuid().ToString("N"));
         var saved = await new UncachedPublication { Revision = "old" }.Save();
         var conditional = Data<UncachedPublication, string>.As<IConditionalWriteRepository<UncachedPublication, string>>();
@@ -39,6 +41,7 @@ public sealed class ConditionalPublicationCacheSpec
         var cache = new ObservedCacheStore();
         var native = new ConditionalObserver();
         await using var host = await Configure(cache, native).StartAsync(TestContext.Current.CancellationToken);
+        using var appScope = AppHost.PushScope(host.Services);
         using var route = EntityContext.With(adapter: "inmemory", partition: Guid.NewGuid().ToString("N"));
         var saved = await new CachedPublication { Revision = "old" }.Save();
         (await CachedPublication.Get(saved.Id))!.Revision.Should().Be("old");
@@ -68,6 +71,7 @@ public sealed class ConditionalPublicationCacheSpec
         var cache = new ObservedCacheStore();
         var native = new ConditionalObserver();
         await using var host = await Configure(cache, native).StartAsync(TestContext.Current.CancellationToken);
+        using var appScope = AppHost.PushScope(host.Services);
         using var route = EntityContext.With(adapter: "inmemory", partition: Guid.NewGuid().ToString("N"));
         var saved = await new CachedPublication { Revision = "old" }.Save();
         (await CachedPublication.Get(saved.Id))!.Revision.Should().Be("old");
@@ -100,6 +104,7 @@ public sealed class ConditionalPublicationCacheSpec
         var cache = new ObservedCacheStore();
         var native = new ConditionalObserver();
         await using var host = await Configure(cache, native).StartAsync(TestContext.Current.CancellationToken);
+        using var appScope = AppHost.PushScope(host.Services);
         var named = Guid.NewGuid().ToString("N");
         using var route = EntityContext.With(adapter: "inmemory", partition: named);
         const string id = "same-identity";
@@ -141,6 +146,7 @@ public sealed class ConditionalPublicationCacheSpec
         var cache = new ObservedCacheStore();
         var native = new ConditionalObserver();
         await using var host = await Configure(cache, native).StartAsync(TestContext.Current.CancellationToken);
+        using var appScope = AppHost.PushScope(host.Services);
         using var route = EntityContext.With(adapter: "inmemory", partition: Guid.NewGuid().ToString("N"));
         var caller = EntityContext.Current;
         var saved = await new CachedPublication { Revision = "old" }.Save();

@@ -83,6 +83,13 @@ background revalidation. `WithTier(CacheTier.LocalOnly)` and `WithTier(CacheTier
 operation requirement and fail clearly when that tier is unavailable. `Layered` is the default and uses every
 available selected tier.
 
+Removal and `GetOrAdd` share one process-local gate per physical key: a completed `Remove` orders after any
+in-flight local fill, so an already-running factory cannot republish a removed value. A layered fill holds the
+gate until every tier write it started has settled, so a removal cannot slip between one tier write's failure
+and another's still-pending publication. A removal that cannot acquire the gate fails with `TimeoutException`
+or `OperationCanceledException` and evicts nothing. The ordering is process-local; direct setters and peer
+processes are not ordered.
+
 ## Composition by reference
 
 | Direct reference | Effect |

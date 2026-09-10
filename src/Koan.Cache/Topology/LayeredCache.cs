@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Koan.Cache.Abstractions.Capabilities;
@@ -82,22 +83,42 @@ internal sealed class LayeredCache
     {
         _topology.Require(tier, "write");
         var writes = new List<ValueTask>(2);
+        Exception? failure = null;
 
-        if (tier != CacheTier.RemoteOnly && _topology.LocalRoute is { } local)
+        try
         {
-            var localOptions = ApplyL1Ttl(options);
-            RequireWriteCapabilities(local, value, localOptions);
-            writes.Add(local.Store.Set(key, value, localOptions, ct));
+            if (tier != CacheTier.RemoteOnly && _topology.LocalRoute is { } local)
+            {
+                var localOptions = ApplyL1Ttl(options);
+                RequireWriteCapabilities(local, value, localOptions);
+                writes.Add(local.Store.Set(key, value, localOptions, ct));
+            }
+
+            if (tier != CacheTier.LocalOnly && _topology.RemoteRoute is { } remote)
+            {
+                RequireWriteCapabilities(remote, value, options);
+                writes.Add(remote.Store.Set(key, value, options, ct));
+            }
         }
-
-        if (tier != CacheTier.LocalOnly && _topology.RemoteRoute is { } remote)
+        catch (Exception ex)
         {
-            RequireWriteCapabilities(remote, value, options);
-            writes.Add(remote.Store.Set(key, value, options, ct));
+            failure = ex;
         }
 
         foreach (var write in writes)
-            await write.ConfigureAwait(false);
+        {
+            try
+            {
+                await write.ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                failure ??= ex;
+            }
+        }
+
+        if (failure is not null)
+            ExceptionDispatchInfo.Capture(failure).Throw();
     }
 
     public async ValueTask<bool> Evict(CacheKey key, CancellationToken ct)

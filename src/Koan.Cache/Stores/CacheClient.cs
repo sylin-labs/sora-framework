@@ -205,11 +205,15 @@ internal sealed class CacheClient : ICacheClient, ICacheSubjectClient
 
     private async ValueTask<bool> RemovePhysical(CacheKey key, CancellationToken ct)
     {
-        var success = await _layered.Evict(key, ct).ConfigureAwait(false);
-        _instrumentation.RecordRemove(key.Value, LayeredProviderTag, success);
-        // Removes always broadcast — peers must drop their L1 entries even if the key wasn't present locally.
-        await _coherence.BroadcastEvict(key, ct).ConfigureAwait(false);
-        return success;
+        var timeout = _options.CurrentValue.DefaultSingleflightTimeout;
+        return await _singleflight.RunAsync(key.Value, timeout, async innerCt =>
+        {
+            var success = await _layered.Evict(key, innerCt).ConfigureAwait(false);
+            _instrumentation.RecordRemove(key.Value, LayeredProviderTag, success);
+            // Removes always broadcast; peers must drop their L1 entries even if the key wasn't present locally.
+            await _coherence.BroadcastEvict(key, innerCt).ConfigureAwait(false);
+            return success;
+        }, ct).ConfigureAwait(false);
     }
 
     public ValueTask Touch(CacheKey key, CacheEntryOptions options, CancellationToken ct)
@@ -387,14 +391,12 @@ internal sealed class CacheClient : ICacheClient, ICacheSubjectClient
         var normalized = ApplyScope(options);
         var physical = _identity.Bind(key, normalized.Tags, subject, "cache get-or-add");
         normalized = WithTags(normalized, physical.Tags);
-        var (found, existing) = await TryGetPhysicalValueAsync<T>(physical.Key, normalized, ct).ConfigureAwait(false);
-        if (found) return existing;
 
         var timeout = normalized.SingleflightTimeout ?? _options.CurrentValue.DefaultSingleflightTimeout;
         return await _singleflight.RunAsync<T?>(physical.Key.Value, timeout, async innerCt =>
         {
-            var (innerFound, innerValue) = await TryGetPhysicalValueAsync<T>(physical.Key, normalized, innerCt).ConfigureAwait(false);
-            if (innerFound) return innerValue;
+            var (found, existing) = await TryGetPhysicalValueAsync<T>(physical.Key, normalized, innerCt).ConfigureAwait(false);
+            if (found) return existing;
 
             var created = await valueFactory(innerCt).ConfigureAwait(false);
             if (created is null) return default;

@@ -1,6 +1,7 @@
 using Koan.Cache.Abstractions.Policies;
 using Koan.Core;
 using Koan.Core.Diagnostics;
+using Koan.Core.Hosting.App;
 using Koan.Data.Core.Model;
 using Koan.Data.Core;
 using Koan.Data.Abstractions;
@@ -16,6 +17,7 @@ public sealed class EntityCacheCompositionSpec
     {
         await using var host = await KoanIntegrationHost.Configure()
             .ConfigureServices(services => services.AddKoan()).StartAsync(TestContext.Current.CancellationToken);
+        using var appScope = AppHost.PushScope(host.Services);
         using var route = EntityContext.With(adapter: "inmemory", partition: Guid.NewGuid().ToString("N"));
         var repository = host.Services.GetRequiredService<IDataService>().GetRepository<InsertedCacheEntity, string>();
         var inserts = (IInsertOnlyRepository<InsertedCacheEntity, string>)repository;
@@ -35,6 +37,7 @@ public sealed class EntityCacheCompositionSpec
     {
         await using var host = await KoanIntegrationHost.Configure()
             .ConfigureServices(services => services.AddKoan()).StartAsync(TestContext.Current.CancellationToken);
+        using var appScope = AppHost.PushScope(host.Services);
         using var route = EntityContext.With(adapter: "inmemory", partition: Guid.NewGuid().ToString("N"));
         var row = await new InsertedCacheEntity { Value = "cached" }.Save();
         (await InsertedCacheEntity.Get(row.Id))!.Value.Should().Be("cached");
@@ -51,6 +54,7 @@ public sealed class EntityCacheCompositionSpec
         await using var host = await KoanIntegrationHost.Configure()
             .ConfigureServices(services => services.AddKoan())
             .StartAsync(ct);
+        using var appScope = AppHost.PushScope(host.Services);
 
         var facts = host.Services.GetRequiredService<IKoanRuntimeFacts>().Current.Facts;
 

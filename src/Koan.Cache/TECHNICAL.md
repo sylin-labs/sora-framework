@@ -77,6 +77,28 @@ rebroadcast. The local Communication floor is automatic. Redis contributes a lay
 candidate only while Redis owns the remote tier; a direct RabbitMQ reference is ordinary provider
 intent. L1 TTL bounds staleness when a best-effort invalidation is lost.
 
+## Ordered removal and fills
+
+Ordinary removal and the complete GetOrAdd read/fill path, including the L2-hit L1 backfill, run under
+one process-local keyed lease per bound physical key. After a removal completes, an already-running
+local GetOrAdd factory cannot republish its pre-removal value, and a parked backfill cannot resurrect an
+evicted entry in L1. A removal that cannot acquire the lease fails on
+`Cache:DefaultSingleflightTimeout` (`TimeoutException`) or the caller's cancellation
+(`OperationCanceledException`) before any eviction and claims nothing. A reentrant same-key removal
+from inside a GetOrAdd factory fails the same bounded way instead of bypassing. The returned bool
+still reports only whether an entry was removed, and removal broadcast behavior is unchanged.
+
+A layered fill keeps that lease until every tier write it started has settled. `LayeredCache.Write`
+starts all tier writes, settles each one, and only then propagates the first failure, including when a
+synchronous start or capability-validation throw happens after an earlier write already started. A
+same-key removal therefore cannot order between a failed tier write and a still-pending one of the
+same fill. Exception and cancellation meaning are unchanged: the first failure rethrows with its
+original instance and stack; later failures are observed but do not replace it.
+
+The ordering is process-local: values already returned to callers, direct setters, direct `Get` and
+`Set` writes, the direct read path outside GetOrAdd, peer processes, and keys a tag flush has not
+discovered are not ordered.
+
 ## Inspection and unsupported scenarios
 
 The policy lifecycle owner materializes the registry before composition facts are collected, even though
