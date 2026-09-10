@@ -1,6 +1,6 @@
 {
-  "Sylin.Koan.Cache": "1.0.47",
+  "Sylin.Koan.Cache": "1.0.48",
   "Sylin.Koan.Cache.Abstractions": "1.0.19",
-  "Sylin.Koan.Core": "1.0.37",
-  "$transitive": "32F43AA21C87CFA418BA4BFA390DDE07F1289FDE2EB874A9D383CD1C7E6F40DF"
+  "Sylin.Koan.Core": "1.0.38",
+  "$transitive": "C915D25C47D93B05B3F6D831DA01CE73F550BF3C73563AC28001077D48C99742"
 }
