@@ -1,8 +1,8 @@
 {
-  "Sylin.Koan.Cache": "1.0.54",
+  "Sylin.Koan.Cache": "1.0.55",
   "Sylin.Koan.Cache.Abstractions": "1.0.21",
-  "Sylin.Koan.Communication": "1.0.40",
+  "Sylin.Koan.Communication": "1.0.41",
   "Sylin.Koan.Redis.Abstractions": "1.0.12",
   "Sylin.Koan.Redis": "1.0.21",
-  "$transitive": "A8FF0CBB2D4EA9C5758A0656BED96781D1F176F1B1CD8C95C358B0A641EC327C"
+  "$transitive": "90794649DA887469378BE3DA5EB7417821D5B96976CF2041BAF2908E6E112680"
 }
