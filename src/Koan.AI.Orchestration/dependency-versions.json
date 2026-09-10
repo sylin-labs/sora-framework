@@ -1,10 +1,10 @@
 {
   "Sylin.Koan.Core": "1.0.38",
-  "Sylin.Koan.Data.Core": "1.0.64",
+  "Sylin.Koan.Data.Core": "1.0.65",
   "Sylin.Koan.AI.Contracts": "1.0.22",
   "Sylin.Koan.AI.Contracts.Shared": "1.0.12",
-  "Sylin.Koan.AI.Prompt": "1.0.34",
+  "Sylin.Koan.AI.Prompt": "1.0.35",
   "Sylin.Koan.AI": "1.0.28",
-  "Sylin.Koan.Data.Vector": "1.0.39",
-  "$transitive": "2351D018DF42800C19FCF2C52685A6253213255F37E1E2A333A309B56F65C6C5"
+  "Sylin.Koan.Data.Vector": "1.0.40",
+  "$transitive": "865F92FFA725C687C022440E877593E6D6E1C240270900B17E734DA3192D0BD7"
 }
