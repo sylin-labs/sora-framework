@@ -1,8 +1,8 @@
 {
-  "Sylin.Koan.Data.Core": "1.0.66",
-  "Sylin.Koan.Data.Abstractions": "1.0.38",
-  "Sylin.Koan.Storage": "1.0.37",
-  "Sylin.Koan.Storage.Abstractions": "1.0.28",
+  "Sylin.Koan.Data.Core": "1.0.67",
+  "Sylin.Koan.Data.Abstractions": "1.0.39",
+  "Sylin.Koan.Storage": "1.0.38",
+  "Sylin.Koan.Storage.Abstractions": "1.0.29",
   "Sylin.Koan.Core": "1.0.39",
-  "$transitive": "206173808AFC89B5E67890ED9B889DD9A7DB18A0507FBFEECFFFFF17C0CD0970"
+  "$transitive": "027EAA07B188BA199A1891981540887A2D008BC2C6EC307F6D8DA42D08FA3E14"
 }
