@@ -1,10 +1,10 @@
 {
   "Sylin.Koan.Data.Abstractions": "1.0.39",
-  "Sylin.Koan.Data.Vector.Abstractions": "1.0.30",
-  "Sylin.Koan.Data.Vector": "1.0.42",
-  "Sylin.Koan.Data.Core": "1.0.67",
+  "Sylin.Koan.Data.Vector.Abstractions": "1.0.31",
+  "Sylin.Koan.Data.Vector": "1.0.43",
+  "Sylin.Koan.Data.Core": "1.0.68",
   "Sylin.Koan.Core": "1.0.39",
   "Sylin.Koan.Redis.Abstractions": "1.0.12",
   "Sylin.Koan.Redis": "1.0.21",
-  "$transitive": "F592CCC386D12EA2452B048AFC71A85E0747C537C2331EC69F3CFDE98D47E83B"
+  "$transitive": "6ABBDCAA6D681C455104575084B1D791187C9CE233A72C46057DF4A64149D82B"
 }
