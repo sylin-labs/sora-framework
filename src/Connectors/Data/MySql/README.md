@@ -1,6 +1,6 @@
 # Sylin.Koan.Data.Connector.MySql
 
-Use MySQL as the record store behind Koan's existing Entity API.
+Use MySQL or MariaDB as the record store behind Koan's existing Entity API.
 
 ## Use the connector
 
@@ -23,7 +23,7 @@ var open = await Todo.Query(item => !item.Done, ct);
 
 No MySQL repository or registration API is required.
 
-## Configure MySQL
+## Configure MySQL or MariaDB
 
 Use a normal MySqlConnector connection string when discovery is not appropriate:
 
@@ -41,7 +41,7 @@ For a named source, configure the standard source connection and select it with 
 
 ## Guarantees and limits
 
-- The supported server line is MySQL 8.4.
+- The supported server lines are MySQL 8.4 and MariaDB 11.8 LTS.
 - The configured database must already exist. Managed lifecycle can create Entity tables; it does not create databases.
 - Production table creation additionally requires `AllowProductionDdl=true`; Koan never infers production DDL consent.
 - Managed tables use InnoDB. An existing non-InnoDB table is rejected because atomic-batch semantics cannot be claimed for it.
@@ -50,7 +50,10 @@ For a named source, configure the standard source connection and select it with 
 - Managed row-scope values are stored in the Entity JSON document and guard conflicting writes.
 - Unreachable endpoints, unresolved `auto`, unconfigured named sources, denied DDL/write access, and incompatible schemas fail at the connector boundary.
 
-This connector targets MySQL. MariaDB compatibility is not asserted by this package.
+MariaDB exposes its `JSON` alias as validated `LONGTEXT` and retains legacy integer display widths in
+schema metadata. The connector recognizes those exact server representations; an ordinary unchecked
+`LONGTEXT` does not satisfy a structured mapping. The same `mysql` adapter key, options, connection
+strings, query behavior, and Entity grammar apply to both server families.
 
 ## Enum storage contract
 

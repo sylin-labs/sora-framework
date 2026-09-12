@@ -2,7 +2,7 @@
 
 ## Ownership boundary
 
-`Koan.Data.Relational` owns mapping plans, managed mapping, structured-value encoding, filter translation, schema policy, and relational source integration. This connector owns MySqlConnector lifetime, endpoint normalization, MySQL SQL and DDL, routing, inspection, health, and capability declarations.
+`Koan.Data.Relational` owns mapping plans, managed mapping, structured-value encoding, filter translation, schema policy, and relational source integration. This connector owns MySqlConnector lifetime, endpoint normalization, MySQL-protocol SQL and DDL, routing, inspection, health, and capability declarations for the supported MySQL and MariaDB server lines.
 
 Applications continue to use `Entity<T>` operations. The adapter key is `mysql`; package-reference discovery registers `MySqlModule` and the factory.
 
@@ -17,11 +17,11 @@ The final connection is normalized through `MySqlConnectionStringBuilder`. Key-v
 Managed Entities use one InnoDB table per resolved container:
 
 - `Id` is a native primary-key column. String identities use an explicit binary, case-sensitive collation.
-- `Json` is a MySQL `JSON` column containing the Entity body and framework-managed fields.
+- `Json` is a native MySQL `JSON` column or MariaDB's `JSON` alias (validated `LONGTEXT`) containing the Entity body and framework-managed fields.
 - Provider-generated integer identities use `AUTO_INCREMENT` and `LAST_INSERT_ID()` on the same connection.
 - Structured patches use `JSON_SET`; reads and filters use `JSON_EXTRACT` / `JSON_UNQUOTE` with type-aware casts.
 
-The database must exist before the connector opens it. With managed storage, readiness creates a missing table only when source access and DDL policy allow it; production also requires explicit `AllowProductionDdl` consent. Relaxed validation requires every mapped storage root, the exact primary key, InnoDB, and compatible identity/JSON shapes. Strict validation additionally checks every mapped native type, nullability, auto-increment decision, and stored generated column. External mappings keep their declared database, table, bindings, and lifecycle policy.
+The database must exist before the connector opens it. With managed storage, readiness creates a missing table only when source access and DDL policy allow it; production also requires explicit `AllowProductionDdl` consent. Relaxed validation requires every mapped storage root, the exact primary key, InnoDB, and compatible identity/JSON shapes. Strict validation additionally checks every mapped native type, nullability, auto-increment decision, and stored generated column. MariaDB metadata normalization accepts only its exact `json_valid(column)` JSON-alias check and treats legacy integer display widths as non-semantic; ordinary unchecked text and all other schema drift remain mismatches. External mappings keep their declared database, table, bindings, and lifecycle policy.
 
 ## Query execution
 
@@ -39,7 +39,7 @@ Bulk upsert and batch operations share one MySQL transaction. Bulk delete uses o
 
 Registered SQL record/scalar operations require a configured read lane and begin a read-only transaction. The inspector lists, resolves, describes, and samples tables/views within the routed database through `information_schema` and the shared neutral reader. Health opens the resolved source and executes `SELECT 1`.
 
-Capability declarations cover native LINQ/filter execution, provider-bounded paging, bulk writes/deletes, atomic batches, fast removal, conditional replace, and row/container/database isolation. No vector capability or MariaDB-specific dialect branch is present.
+Capability declarations cover native LINQ/filter execution, provider-bounded paging, bulk writes/deletes, atomic batches, fast removal, conditional replace, and row/container/database isolation. No vector capability is present. MySQL 8.4 and MariaDB 11.8 LTS share the query dialect and application surface; the only server-family branch normalizes schema metadata that the engines report differently.
 
 ## Enum storage contract
 

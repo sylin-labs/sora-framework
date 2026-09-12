@@ -154,6 +154,7 @@ owns its setup and backend-specific limits.
 | Process-local tests or ephemeral work | `Sylin.Koan.Data.Connector.InMemory` | Non-durable; not a production persistence claim |
 | File-backed, zero-infrastructure state | JSON provider included by the application bundle | Limited concurrency; not the durable foundation path |
 | PostgreSQL | `Sylin.Koan.Data.Connector.Postgres` | External service and provider-owned schema/operations apply |
+| MySQL or MariaDB | `Sylin.Koan.Data.Connector.MySql` | MySQL 8.4 or MariaDB 11.8 LTS; database and operational policy remain external |
 | SQL Server | `Sylin.Koan.Data.Connector.SqlServer` | External service and provider-owned schema/operations apply |
 | MongoDB | `Sylin.Koan.Data.Connector.Mongo` | Document-store query and consistency limits apply |
 | Couchbase | `Sylin.Koan.Data.Connector.Couchbase` | Bucket, query-service, and consistency limits apply |

@@ -4,7 +4,7 @@ domain: framework
 title: "Koan connector matrix"
 audience: [ai-agents, developers, architects]
 status: current
-last_updated: 2026-08-30
+last_updated: 2026-09-12
 framework_version: v1.0.0
 validation:
   status: generated
@@ -20,7 +20,7 @@ the capability map. Once the answer is yes, the map carries the exact package an
 
 | Family | Providers |
 |---|---|
-| Entity store | Cockroach · Couchbase · CouchDb · DuckDb · Elasticsearch · Firebird · InMemory · Json · Mongo · MySql ⚠ · OpenSearch · Postgres · Redis · SQL Server · SQLite |
+| Entity store | Cockroach · Couchbase · CouchDb · DuckDb · Elasticsearch · Firebird · InMemory · Json · Mongo · MySql · OpenSearch · Postgres · Redis · SQL Server · SQLite |
 | Vector index | Chroma · InMemory · Milvus · MongoAtlasVector ⚠ · PgVector ⚠ · Qdrant · RedisVector ⚠ · SqliteVec · Weaviate |
 | AI runtime | Hugging Face ⚠ · LlamaCpp · LM Studio · Ollama · ONNX |
 | Object storage | Local · S3 ⚠ |

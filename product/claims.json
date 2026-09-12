@@ -121,6 +121,24 @@
       ]
     },
     {
+      "id": "mysql-mariadb-data-provider",
+      "title": "MySQL and MariaDB Entity persistence",
+      "summary": "The MySQL-protocol connector preserves Koan Entity CRUD, native filtering, stable paging, provider-bounded streaming, batch and conditional writes, source routing, schema policy, health, and declared isolation semantics on MySQL 8.4 and MariaDB 11.8 LTS.",
+      "maturity": "supported-extension",
+      "packages": [
+        "Sylin.Koan.Data.Connector.MySql"
+      ],
+      "documentation": [
+        "src/Connectors/Data/MySql/README.md",
+        "src/Connectors/Data/MySql/TECHNICAL.md",
+        "docs/reference/data/index.md"
+      ],
+      "evidence": [
+        "tests/Suites/Data/Connector.MySql",
+        "docs/initiatives/koan-v1/work-items/r13/R13-21-mysql-mariadb-provider-promotion.md"
+      ]
+    },
+    {
       "id": "sqlserver-data-provider",
       "title": "SQL Server Entity persistence",
       "summary": "SQL Server preserves Koan Entity CRUD, native filtering, paging, provider-bounded streaming, batch and conditional writes, source routing, schema policy, health, and declared isolation semantics over the supported relational foundation.",

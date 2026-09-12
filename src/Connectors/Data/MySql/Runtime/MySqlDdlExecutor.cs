@@ -20,21 +20,42 @@ internal sealed class MySqlDdlExecutor(MySqlConnection connection, MySqlDialect 
     public async Task<RelationalTableShape?> Describe(RelationalTableDefinition table, CancellationToken ct = default)
     {
         string? engine;
+        bool isMariaDb;
         await using (var probe = connection.CreateCommand())
         {
             probe.CommandText =
-                "SELECT engine FROM information_schema.tables WHERE table_schema=@database AND table_name=@table LIMIT 1";
+                "SELECT engine, VERSION() FROM information_schema.tables " +
+                "WHERE table_schema=@database AND table_name=@table LIMIT 1";
             probe.Parameters.AddWithValue("database", table.Schema);
             probe.Parameters.AddWithValue("table", table.Name);
-            engine = Convert.ToString(await probe.ExecuteScalarAsync(ct).ConfigureAwait(false));
+            await using var reader = await probe.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (!await reader.ReadAsync(ct).ConfigureAwait(false)) return null;
+            engine = Convert.ToString(reader.GetValue(0));
+            isMariaDb = (Convert.ToString(reader.GetValue(1)) ?? string.Empty)
+                .Contains("MariaDB", StringComparison.OrdinalIgnoreCase);
         }
         if (engine is null) return null;
 
         await using var command = connection.CreateCommand();
-        command.CommandText = """
+        // MariaDB implements its JSON alias as LONGTEXT plus an exact json_valid(column) check and
+        // reports LONGTEXT through information_schema.columns. Preserve that semantic distinction:
+        // an ordinary LONGTEXT must not satisfy a structured mapping merely because its collation matches.
+        var jsonAlias = isMariaDb
+            ? """
+              EXISTS (
+                  SELECT 1
+                    FROM information_schema.check_constraints AS cc
+                   WHERE cc.constraint_schema = c.table_schema
+                     AND cc.table_name = c.table_name
+                     AND REPLACE(REPLACE(LOWER(cc.check_clause), '`', ''), ' ', '') =
+                         CONCAT('json_valid(', LOWER(c.column_name), ')')
+              )
+              """
+            : "FALSE";
+        command.CommandText = $"""
             SELECT c.column_name, c.column_type, c.is_nullable,
                    c.character_set_name, c.collation_name, c.extra, pk.ordinal_position,
-                   c.column_comment
+                   c.column_comment, {jsonAlias} AS is_json_alias
               FROM information_schema.columns AS c
               LEFT JOIN information_schema.key_column_usage AS pk
                 ON pk.table_schema = c.table_schema
@@ -60,10 +81,12 @@ internal sealed class MySqlDdlExecutor(MySqlConnection connection, MySqlDialect 
                     Nullable: string.Equals(reader.GetString(2), "YES", StringComparison.OrdinalIgnoreCase),
                     IsGenerated: extra.Contains("auto_increment", StringComparison.OrdinalIgnoreCase),
                     IsProjected: extra.Contains("stored generated", StringComparison.OrdinalIgnoreCase),
-                    NativeType: Native(
-                        reader.GetString(1),
-                        reader.IsDBNull(3) ? null : reader.GetString(3),
-                        reader.IsDBNull(4) ? null : reader.GetString(4)),
+                    NativeType: Convert.ToBoolean(reader.GetValue(8))
+                        ? "json"
+                        : Native(
+                            reader.GetString(1),
+                            reader.IsDBNull(3) ? null : reader.GetString(3),
+                            reader.IsDBNull(4) ? null : reader.GetString(4)),
                     ProjectionStamp: Stamp(reader.IsDBNull(7) ? null : reader.GetString(7)));
                 if (!reader.IsDBNull(6)) key.Add((Convert.ToInt32(reader.GetValue(6)), name));
             }
@@ -272,8 +295,27 @@ internal sealed class MySqlDdlExecutor(MySqlConnection connection, MySqlDialect 
         return (spelling[..at], suffix[0], suffix.Length == 2 ? suffix[1] : null);
     }
 
-    private static string Normalize(string value) =>
-        string.Concat(value.Where(static character => !char.IsWhiteSpace(character))).ToLowerInvariant();
+    private static string Normalize(string value)
+    {
+        var normalized = string.Concat(value.Where(static character => !char.IsWhiteSpace(character)))
+            .ToLowerInvariant();
+
+        // MariaDB still reports legacy integer display widths (for example int(11)); MySQL 8.4
+        // reports the same storage type as int. Width never changes integer range or representation.
+        // Keep tinyint(1), however, because BOOLEAN is intentionally read back through that spelling.
+        foreach (var integer in new[] { "tinyint", "smallint", "mediumint", "bigint", "integer", "int" })
+        {
+            var prefix = integer + "(";
+            if (!normalized.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            var close = normalized.IndexOf(')', prefix.Length);
+            if (close < 0 || !normalized[prefix.Length..close].All(char.IsAsciiDigit)) break;
+            if (integer == "tinyint" && normalized[prefix.Length..close] == "1") break;
+            normalized = integer + normalized[(close + 1)..];
+            break;
+        }
+
+        return normalized;
+    }
 
     private static string StoreType(RelationalColumnDefinition column)
     {
