@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Description>Native AT Protocol identity and authorized session connector for Koan Web Auth.</Description>
+    <PackageTags>$(CommonPackageTags);auth;atproto;oauth;provider</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="../../../../Koan.Core/Koan.Core.csproj" />
+    <ProjectReference Include="../../../../Koan.Web.Auth.Abstractions/Koan.Web.Auth.Abstractions.csproj" />
+    <ProjectReference Include="../../../../Koan.Web.Auth/Koan.Web.Auth.csproj" />
+    <PackageReference Include="CarpaNet.OAuth" VersionOverride="1.1.0-alpha.5" />
+    <PackageReference Include="DnsClient" VersionOverride="1.8.0" />
+  </ItemGroup>
+</Project>

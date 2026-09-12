@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Koan.Web/Koan.Web.csproj" />
+    <ProjectReference Include="../../src/Koan.Identity/Koan.Identity.csproj" />
+    <ProjectReference Include="../../src/Connectors/Data/Sqlite/Koan.Data.Connector.Sqlite.csproj" />
+    <ProjectReference Include="../../src/Connectors/Web/Auth/Atproto/Koan.Web.Auth.Connector.Atproto.csproj" />
+  </ItemGroup>
+</Project>

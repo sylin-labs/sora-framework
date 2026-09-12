@@ -1,0 +1,84 @@
+{
+  "schema": 2,
+  "app": {
+    "name": "AtprotoIdentity",
+    "koan": "1.0",
+    "tfm": "net10.0"
+  },
+  "modules": [
+    {
+      "id": "Koan.Cache.Abstractions",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Core",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Data.Abstractions",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Data.Analytics",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Data.Connector.Sqlite",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Data.Core",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Data.Relational",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Data.Relational.Abstractions",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Identity",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Security.Trust",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Web",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Web.Auth",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Web.Auth.Abstractions",
+      "version": "1.0"
+    },
+    {
+      "id": "Koan.Web.Auth.Connector.Atproto",
+      "version": "1.0"
+    }
+  ],
+  "directReferences": [
+    {
+      "kind": "project",
+      "id": "Koan.Data.Connector.Sqlite"
+    },
+    {
+      "kind": "project",
+      "id": "Koan.Identity"
+    },
+    {
+      "kind": "project",
+      "id": "Koan.Web"
+    },
+    {
+      "kind": "project",
+      "id": "Koan.Web.Auth.Connector.Atproto"
+    }
+  ]
+}

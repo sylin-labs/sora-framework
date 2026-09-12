@@ -1,0 +1,41 @@
+{
+  "date": "2026-09-09",
+  "runtime": ".NET 10.0.401",
+  "nativeOAuthSdk": "CarpaNet.OAuth/1.1.0-alpha.5",
+  "dnsResolver": "DnsClient/1.8.0",
+  "testPdsRevision": "c1d97bbd5c874ae7c2c26ed84586ef15a000b7ae",
+  "sample": "samples/AtprotoIdentity",
+  "build": { "warnings": 0, "errors": 0 },
+  "focusedGuardTests": { "passed": 19, "failed": 0, "explicitLocalLifecycleSkippedByDefault": 1 },
+  "realProviderBrowserApi": {
+    "origin": "http://127.0.0.1:5211",
+    "account": "owner",
+    "handle": "tangent-owner.test",
+    "did": "did:plc:6c26drqwrk5yavtnnjuvpvdf",
+    "scope": "atproto",
+    "passed": [
+      "Handle input with development DNS fixture and real reverse DID binding",
+      "ASP.NET browser correlation cookie and native PAR",
+      "Provider CSRF, password authentication and consent",
+      "Native callback issuer, DID and PDS verification",
+      "Koan cookie sign-in and authenticated /sample/identity",
+      "Protocol DID claim retained through Koan Identity integration",
+      "Callback replay rejected"
+    ],
+    "negativeCases": { "wrongIssuer": 400, "invalidState": 400, "missingCorrelationCookie": 400 },
+    "readinessAfterIdentityAndSqliteComposition": 200
+  },
+  "actualProcessRestart": {
+    "listenerStoppedConfirmed": true,
+    "sameBrowserCookieAuthenticatedAfterRestart": true,
+    "sameProtocolDidAndHandle": true
+  },
+  "checkedLifecycle": {
+    "disconnectReceipt": "lifecycle-disconnect-2026-09-09.json",
+    "reauthorizedReceipt": "lifecycle-reauthorized-2026-09-09.json",
+    "explicitProviderPasswordAndConsentAfterDisconnect": true,
+    "sameDidKoanCookieAndReplayRejectionAfterReauthorization": true,
+    "sampleStoppedBetweenBrowserAndStoreProofProcesses": true
+  },
+  "scopeOfEvidence": "Real local PDS OAuth and the ASP.NET cookie lifecycle, driven through the provider browser API, not browser visual automation. The opt-in lifecycle test independently exercised real provider refresh, checked revocation, retained revoked-refresh rejection as invalid_grant, and restored refresh after explicit reauthorization. Only local expiry metadata was adjusted to trigger refresh. Production certification and Spaces repository verification are not claimed."
+}

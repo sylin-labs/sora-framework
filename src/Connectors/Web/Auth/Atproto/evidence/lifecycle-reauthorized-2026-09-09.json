@@ -1,0 +1,16 @@
+{
+  "date": "2026-09-09T20:53:03.1716881+00:00",
+  "mode": "reauthorized",
+  "did": "did:plc:6c26drqwrk5yavtnnjuvpvdf",
+  "scope": "atproto",
+  "actualProviderRefresh": true,
+  "accessTokenRotated": true,
+  "refreshTokenRotated": true,
+  "authenticatedPdsRequest": 200,
+  "localExpiryMetadataAdjusted": true,
+  "checkedDisconnect": false,
+  "localSessionRemoved": false,
+  "revokedRefreshDenied": false,
+  "revokedRefreshError": null,
+  "secretsWritten": false
+}
