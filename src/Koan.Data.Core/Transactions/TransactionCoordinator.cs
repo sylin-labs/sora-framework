@@ -20,7 +20,8 @@ internal sealed class TransactionCoordinator : ITransactionCoordinator
     private readonly ILogger<TransactionCoordinator> _logger;
     private readonly TransactionOptions _options;
     private readonly Dictionary<string, List<ITrackedOperation>> _operationsByAdapter = new();
-    private readonly Activity? _activity;
+    private Activity? _activity;
+    private bool _hasTrackedWork;
     private bool _isCompleted;
     private readonly object _lock = new();
     private readonly IServiceProvider _services;
@@ -43,16 +44,6 @@ internal sealed class TransactionCoordinator : ITransactionCoordinator
         _services = services ?? throw new ArgumentNullException(nameof(services));
         _operationHorizon = operationHorizon ?? throw new ArgumentNullException(nameof(operationHorizon));
 
-        // Start telemetry span
-        if (_options.EnableTelemetry)
-        {
-            _activity = TransactionTelemetry.StartTransaction(name);
-        }
-
-        _logger.LogInformation(
-            "Transaction '{TransactionName}' started (id: {TransactionId})",
-            Name,
-            _activity?.Id ?? "unknown");
     }
 
     public void TrackSave<TEntity, TKey>(TEntity entity, EntityContext.ContextState context)
@@ -138,6 +129,7 @@ internal sealed class TransactionCoordinator : ITransactionCoordinator
 
     private void TrackOperation(ITrackedOperation operation)
     {
+        StartWorkTelemetry();
         var adapter = operation.GetAdapterHint();
 
         if (!_operationsByAdapter.ContainsKey(adapter))
@@ -160,6 +152,11 @@ internal sealed class TransactionCoordinator : ITransactionCoordinator
     public async Task Commit(CancellationToken ct = default)
     {
         if (_isCompleted) return; // idempotent: a second Commit (or Commit after Rollback) is a no-op
+        if (!_hasTrackedWork)
+        {
+            _isCompleted = true;
+            return;
+        }
 
         var stopwatch = Stopwatch.StartNew();
 
@@ -224,6 +221,11 @@ internal sealed class TransactionCoordinator : ITransactionCoordinator
     public async Task Rollback(CancellationToken ct = default)
     {
         if (_isCompleted) return; // idempotent: a second Rollback (or Rollback after Commit) is a no-op
+        if (!_hasTrackedWork)
+        {
+            _isCompleted = true;
+            return;
+        }
 
         try
         {
@@ -268,6 +270,22 @@ internal sealed class TransactionCoordinator : ITransactionCoordinator
     public IReadOnlyList<string> Adapters => _operationsByAdapter.Keys.ToArray();
 
     public int TrackedOperationCount => _operationsByAdapter.Values.Sum(list => list.Count);
+
+    private void StartWorkTelemetry()
+    {
+        if (_hasTrackedWork) return;
+        _hasTrackedWork = true;
+
+        if (_options.EnableTelemetry)
+        {
+            _activity = TransactionTelemetry.StartTransaction(Name);
+        }
+
+        _logger.LogInformation(
+            "Transaction '{TransactionName}' started (id: {TransactionId})",
+            Name,
+            _activity?.Id ?? "unknown");
+    }
 
     private async Task ExecuteOperations(CancellationToken ct)
     {

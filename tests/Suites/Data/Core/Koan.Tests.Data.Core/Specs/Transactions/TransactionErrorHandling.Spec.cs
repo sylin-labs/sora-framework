@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Koan.Data.Abstractions;
 using Koan.Data.Abstractions.Failures;
 using Koan.Data.Core;
@@ -6,6 +7,8 @@ using Koan.Data.Core.Model;
 using Koan.Data.Core.Transactions;
 using Koan.Tests.Data.Core.Support;
 using AwesomeAssertions;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Koan.Tests.Data.Core.Specs.Transactions;
 
@@ -29,7 +32,9 @@ public sealed class TransactionErrorHandlingSpec
     [Fact]
     public async Task Empty_transaction_commits_successfully()
     {
-        await using var runtime = await DataCoreRuntimeFixture.CreateAsync();
+        var logs = new CoordinatorLogProvider();
+        await using var runtime = await DataCoreRuntimeFixture.CreateAsync(
+            configureServices: services => services.AddSingleton<ILoggerProvider>(logs));
 
         var success = false;
 
@@ -41,6 +46,34 @@ public sealed class TransactionErrorHandlingSpec
         }
 
         success.Should().BeTrue("empty transaction should commit successfully");
+        logs.Entries.Should().BeEmpty(
+            "an empty/read-only coordination scope has no work lifecycle worth reporting");
+    }
+
+    [Fact]
+    public async Task Transaction_telemetry_starts_with_the_first_tracked_write()
+    {
+        var logs = new CoordinatorLogProvider();
+        await using var runtime = await DataCoreRuntimeFixture.CreateAsync(
+            configureServices: services => services.AddSingleton<ILoggerProvider>(logs));
+        var partition = $"tx-telemetry-{Guid.CreateVersion7():n}";
+        var entity = new TodoEntity { Title = "Tracked work" };
+
+        using (EntityContext.Partition(partition))
+        using (EntityContext.Transaction("work-bearing"))
+        {
+            logs.Entries.Should().BeEmpty("opening a scope alone does not start work telemetry");
+            await entity.Save();
+            logs.Entries.Should().Contain(entry => entry.Contains("'work-bearing' started", StringComparison.Ordinal));
+            await EntityContext.Commit();
+        }
+
+        logs.Entries.Should().Contain(entry =>
+            entry.Contains("executing 1 operations across 1 adapter(s)", StringComparison.Ordinal));
+        logs.Entries.Should().Contain(entry =>
+            entry.Contains("completed successfully", StringComparison.Ordinal));
+        using (EntityContext.Partition(partition))
+            (await TodoEntity.Get(entity.Id)).Should().NotBeNull();
     }
 
     [Fact]
@@ -248,5 +281,35 @@ public sealed class TransactionErrorHandlingSpec
     private sealed class DeferredFailureEntity : Entity<DeferredFailureEntity>
     {
         public bool FailOnSave { get; set; }
+    }
+
+    private sealed class CoordinatorLogProvider : ILoggerProvider
+    {
+        private readonly ConcurrentQueue<string> _entries = new();
+
+        public IReadOnlyCollection<string> Entries => _entries.ToArray();
+
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(
+            categoryName == "Koan.Data.Core.Transactions.TransactionCoordinator" ? _entries : null);
+
+        public void Dispose() { }
+
+        private sealed class CapturingLogger(ConcurrentQueue<string>? entries) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => NoopScope.Instance;
+            public bool IsEnabled(LogLevel logLevel) => entries is not null;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                if (entries is not null) entries.Enqueue(formatter(state, exception));
+            }
+        }
+
+        private sealed class NoopScope : IDisposable
+        {
+            public static NoopScope Instance { get; } = new();
+            public void Dispose() { }
+        }
     }
 }

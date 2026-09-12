@@ -26,7 +26,8 @@ public sealed class TransactionOptions
     public bool AutoCommitOnDispose { get; set; } = false;
 
     /// <summary>
-    /// Enable telemetry spans and structured logging. Default: true.
+    /// Enable telemetry spans and structured logging for coordination scopes that track work.
+    /// Empty/read-only scopes complete silently. Default: true.
     /// </summary>
     public bool EnableTelemetry { get; set; } = true;
 
