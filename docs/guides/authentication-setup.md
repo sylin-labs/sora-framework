@@ -7,9 +7,9 @@ status: current
 last_updated: 2026-09-10
 framework_version: v1.0.0
 validation:
-  date_last_tested: 2026-07-18
+  date_last_tested: 2026-09-09
   status: verified
-  scope: provider-plan unit tests, local OAuth/OIDC HTTP tests, authorization-server integration tests
+  scope: provider-plan and scheme unit tests, local OAuth/OIDC HTTP tests, synthetic custom-protocol HTTP composition tests
 related_guides:
   - auth-howto.md
   - authorization-howto.md
@@ -119,6 +119,20 @@ The protocol engines live in Web Auth, so a generic connector package is unneces
 
 OIDC requires `Authority`, `ClientId`, and `ClientSecret`. OAuth2 requires `AuthorizationEndpoint`, `TokenEndpoint`,
 `UserInfoEndpoint`, `ClientId`, and `ClientSecret`. SAML is not supported.
+
+## Protocol-specific connectors
+
+A connector for another protocol uses the same discovery, challenge route, provider election, runtime facts, and
+application cookie. Reference the connector and follow its configuration contract; changing `Type` to an unsupported
+protocol does not supply a handler. Startup names the missing connector or named scheme when protocol intent cannot
+be realized. OAuth2 and OIDC remain built into Web Auth.
+
+Connector authors register an `IAuthProtocol` validator alongside their `AuthProviderDefinition` and normal ASP.NET
+authentication scheme inside the connector module. The validator receives the merged `ProviderOptions`; it must
+honor those values or return corrections with full setting paths. It cannot silently ignore a configured callback or
+scope. The framework keeps eligibility, election, and cookie policy; the connector owns remote protocol validation,
+identity linkage, and any credentials or tokens needed for that protocol. See the
+[Web Auth technical contract](../../src/Koan.Web.Auth/TECHNICAL.md) for this contribution boundary.
 
 ## Multiple providers and default election
 

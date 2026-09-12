@@ -13,12 +13,26 @@ internal sealed class AuthProviderPlan : IAuthProviderCatalog
 
     public AuthProviderPlan(
         IOptions<AuthOptions> options,
-        IEnumerable<AuthProviderDefinition> definitions)
+        IEnumerable<AuthProviderDefinition> definitions,
+        IEnumerable<IAuthProtocol>? protocols = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(definitions);
 
         var configured = options.Value;
+        var protocolCatalog = ProviderCatalog<IAuthProtocol>.Compile(
+            protocols ?? [],
+            static protocol => new ProviderCandidateDescriptor(protocol.Protocol));
+        foreach (var protocol in protocolCatalog.Candidates)
+        {
+            if (string.Equals(protocol.Id, AuthProviderProtocols.Oidc, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(protocol.Id, AuthProviderProtocols.OAuth2, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    $"Authentication protocol '{protocol.Id}' is owned by Koan Web Auth and cannot be replaced by a connector.");
+            }
+        }
+
         var catalog = ProviderCatalog<AuthProviderDefinition>.Compile(
             definitions,
             static definition => new ProviderCandidateDescriptor(
@@ -33,7 +47,7 @@ internal sealed class AuthProviderPlan : IAuthProviderCatalog
             var effective = isExplicit
                 ? ProviderOptions.Merge(definition.Defaults, overlay!)
                 : definition.Defaults;
-            routes.Add(candidate.Id, Compile(candidate.Id, effective, definition, isExplicit));
+            routes.Add(candidate.Id, Compile(candidate.Id, effective, definition, isExplicit, protocolCatalog));
         }
 
         // Web Auth itself owns generic OIDC/OAuth2 mechanics. An explicitly configured provider therefore needs no
@@ -47,7 +61,7 @@ internal sealed class AuthProviderPlan : IAuthProviderCatalog
                 Automatic: false,
                 Available: true,
                 AvailabilityReason: "configuration-defined");
-            routes.Add(id, Compile(id, provider, definition, isExplicit: true));
+            routes.Add(id, Compile(id, provider, definition, isExplicit: true, protocolCatalog));
         }
 
         _routes = routes;
@@ -86,13 +100,15 @@ internal sealed class AuthProviderPlan : IAuthProviderCatalog
         string id,
         ProviderOptions effective,
         AuthProviderDefinition definition,
-        bool isExplicit)
+        bool isExplicit,
+        ProviderCatalog<IAuthProtocol> protocols)
     {
         var protocol = NormalizeProtocol(effective.Type);
         var displayName = string.IsNullOrWhiteSpace(effective.DisplayName) ? id : effective.DisplayName.Trim();
         var priority = effective.Priority ?? definition.Defaults.Priority ?? 0;
         var scopes = effective.Scopes ?? [];
-        var challenge = protocol is AuthProviderProtocols.Oidc or AuthProviderProtocols.OAuth2
+        var customProtocol = protocols.Find(protocol);
+        var challenge = protocol is AuthProviderProtocols.Oidc or AuthProviderProtocols.OAuth2 || customProtocol is not null
             ? $"/auth/{id}/challenge"
             : null;
 
@@ -110,7 +126,22 @@ internal sealed class AuthProviderPlan : IAuthProviderCatalog
             return Route("inactive", false, "configuration-required",
                 $"Configure Koan:Web:Auth:Providers:{id} with the provider credentials to activate it.");
 
-        var missing = MissingFields(protocol, effective);
+        if (customProtocol is not null)
+        {
+            var corrections = customProtocol.Validate(id, effective)
+                ?? throw new InvalidOperationException(
+                    $"Authentication protocol '{protocol}' returned no configuration validation result for provider '{id}'.");
+            if (corrections.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"Koan Web Auth provider '{id}' has incomplete or unsupported '{protocol}' configuration. " +
+                    string.Join(" ", corrections));
+            }
+        }
+
+        var missing = customProtocol is null
+            ? MissingFields(protocol, effective, protocols.Candidates.Select(static candidate => candidate.Id))
+            : [];
         if (missing.Count > 0)
         {
             var source = isExplicit ? "configured" : "automatic";
@@ -178,7 +209,7 @@ internal sealed class AuthProviderPlan : IAuthProviderCatalog
             .FirstOrDefault();
     }
 
-    private static List<string> MissingFields(string protocol, ProviderOptions options)
+    private static List<string> MissingFields(string protocol, ProviderOptions options, IEnumerable<string> customProtocols)
     {
         var missing = new List<string>();
         if (protocol == AuthProviderProtocols.Oidc)
@@ -197,7 +228,9 @@ internal sealed class AuthProviderPlan : IAuthProviderCatalog
         }
         else
         {
-            missing.Add($"Type (supported: {AuthProviderProtocols.Oidc}, {AuthProviderProtocols.OAuth2})");
+            var supported = new[] { AuthProviderProtocols.Oidc, AuthProviderProtocols.OAuth2 }
+                .Concat(customProtocols).Order(StringComparer.Ordinal);
+            missing.Add($"Type (supported: {string.Join(", ", supported)}; reference the connector for another protocol)");
         }
 
         return missing;

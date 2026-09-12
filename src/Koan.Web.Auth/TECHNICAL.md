@@ -19,6 +19,9 @@ directly instead of depending on functional Web Auth merely to consume a contrac
 - Configuration-only provider IDs are supported because OAuth2/OIDC mechanics belong to Web Auth itself.
 - Required OIDC values: `Authority`, `ClientId`, `ClientSecret`.
 - Required OAuth2 values: `AuthorizationEndpoint`, `TokenEndpoint`, `UserInfoEndpoint`, `ClientId`, `ClientSecret`.
+- Other protocols require one connector-owned `IAuthProtocol` validator plus the named ASP.NET handler. Unknown
+  protocols, duplicate validator identities, and attempted replacement of reserved `oidc`/`oauth2` mechanics stop
+  startup. Protocol identities are trimmed and compared without case sensitivity.
 
 Provider callbacks use `/auth/{id}/callback`. Relative endpoints and authorities are reserved for the self-hosted local
 test provider; deployment providers should use absolute HTTPS endpoints.
@@ -33,9 +36,28 @@ external issuers are validated exactly as configured.
 
 ## Runtime behavior
 
-`AuthModule.Start` resolves the immutable plan and seeds one ASP.NET scheme per eligible provider. OIDC uses
+`AuthModule.Start` resolves the immutable plan and ensures one ASP.NET scheme per eligible provider. OIDC uses
 `OpenIdConnectHandler`; OAuth2 uses `OAuthHandler<OAuthOptions>`. PKCE, state, correlation, OIDC nonce, issuer,
 audience, and signature validation remain owned by maintained ASP.NET handlers.
+
+A custom connector registers its `IAuthProtocol`, `AuthProviderDefinition`, and ordinary ASP.NET named scheme in its
+module registration phase. Web Auth passes the effective, merged `ProviderOptions` into the protocol validator once
+for each active provider. The validator returns an empty list for complete configuration, or secret-free corrective
+messages with full configuration paths. It must reject unsupported scope, callback, or other overrides that its
+handler cannot honor; it must not perform network I/O or mutate configuration. Inactive, disabled, and unavailable
+providers do not undergo protocol validation.
+
+The existing seeder preserves a registered scheme and rejects any eligible route that still lacks one. Merely
+declaring a custom `Type` does not implement configuration-only provider IDs: the connector must register each
+corresponding scheme. Normalized protocol and merged provider options remain owned by the compiled plan. There is no
+second custom protocol startup lifecycle and no per-request protocol discovery.
+
+The unmodified challenge controller applies the existing return-URL policy before invoking the named handler.
+Protocol-specific initiation input is available through the handler's request; the connector owns validation and
+must bind any security-relevant value into its protected transaction state rather than trusting callback query
+parameters. Custom handlers own their protocol's remote validation, subject mapping, external linkage, and any token
+storage. They sign in through `AuthenticationExtensions.CookieScheme` to retain Koan's cookie lifecycle and rejection
+semantics. A registered scheme proves composition only, not that these security requirements are implemented.
 
 The framework cookie scheme is `Koan.cookie`. Challenge and access-denied responses pass through the discovered
 `IKoanAuthFlowHandler` pipeline. JSON/API requests receive the built-in JSON challenge behavior; interactive requests

@@ -57,7 +57,7 @@ internal static class AuthSchemeSeeder
         {
             var id = route.Info.Id;
             var cfg = route.Options;
-            var type = (cfg.Type ?? AuthProviderProtocols.Oidc).ToLowerInvariant();
+            var type = route.Info.Protocol;
             // Idempotent: another seeding pass (or a statically-registered scheme) already owns this id.
             if (schemes.GetSchemeAsync(id).GetAwaiter().GetResult() is not null) continue;
 
@@ -74,6 +74,13 @@ internal static class AuthSchemeSeeder
                 oidcPost.PostConfigure(id, opts);    // MUST precede TryAdd (see remarks)
                 oidcCache.TryAdd(id, opts);
                 schemes.AddScheme(new AuthenticationScheme(id, cfg.DisplayName ?? id, typeof(OpenIdConnectHandler)));
+            }
+
+            if (schemes.GetSchemeAsync(id).GetAwaiter().GetResult() is null)
+            {
+                throw new InvalidOperationException(
+                    $"Koan Web Auth provider '{id}' is eligible for protocol '{route.Info.Protocol}', but no ASP.NET authentication scheme is registered. " +
+                    $"The connector must register scheme '{id}' before host startup; reference/configure its handler or disable/remove the provider intent.");
             }
 
             log?.LogDebug("Koan.Web.Auth: seeded {Type} scheme for provider {Provider}", type, id);
