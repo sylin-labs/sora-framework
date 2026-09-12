@@ -7,8 +7,9 @@ status: current
 last_updated: 2026-09-12
 framework_version: v1.0
 validation:
-  status: in-progress
-  scope: MySQL and MariaDB family oracles, package-only consumer, product truth, and publication
+  date_last_tested: 2026-09-12
+  status: passed
+  scope: MySQL and MariaDB family oracles, staged package-only consumers, product truth, and public package existence
 ---
 
 # R13-21 — Promote MySQL and MariaDB Entity persistence
@@ -91,4 +92,18 @@ or a partial test remains unassessed.
   47 claims across 107 packages;
 - package quality: 107/107 packages structurally ready with zero repair or review findings.
 
-Staged package-only consumer and public release evidence are recorded below when those gates finish.
+## Release evidence — 2026-09-12
+
+- the release plan selected 87 changed packages from the 107-package inventory; all 87 packed and the
+  repository package-only verifier passed with `VERIFY|OK|composed=99|booted=Sylin.Koan.App|staged=87`;
+- a separate external consumer contained no project references and resolved
+  `Sylin.Koan.App` 1.0.65, `Sylin.Koan.Data.Core` 1.0.71, and
+  `Sylin.Koan.Data.Connector.MySql` 1.0.104 from the staged feed;
+- that consumer completed Entity save/get, C# 14 array-`Contains` query, and delete journeys against
+  both MySQL 8.4.11 and MariaDB 11.8.9, reporting
+  `MYSQL-MARIADB|PACKAGE-CONSUMER|PASS` for each engine;
+- [Release run 34723245965](https://github.com/sylin-org/koan-framework/actions/runs/34723245965)
+  passed plan, pack, package-only proof, certified-artifact upload, and isolated NuGet publication at
+  commit `ab7754cee140ff93e98c0a4d52b36e8ba2511837`;
+- direct nuget.org package probes returned HTTP 200 for `Sylin.Koan.Data.Connector.MySql` 1.0.104,
+  `Sylin.Koan.Data.Core` 1.0.71, and `Sylin.Koan.Data.Abstractions` 1.0.40.
