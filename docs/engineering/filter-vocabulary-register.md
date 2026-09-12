@@ -4,10 +4,10 @@ domain: data
 title: "Data filter vocabulary register"
 audience: [maintainers, framework-authors, ai-agents]
 status: current
-last_updated: 2026-08-29
+last_updated: 2026-09-12
 framework_version: v1.0.0
 validation:
-  date_last_tested: 2026-08-29
+  date_last_tested: 2026-09-12
   status: verified
   scope: entries verified against this tree by the sessions that recorded them; each entry carries
     its own evidence. Created 2026-08-29 following the media-shaping-register / connector-fleet
@@ -70,3 +70,37 @@ NEVER-touch kit has no dedicated `$like` cell yet — adding one is an owner cal
 4. `VectorFilterReader` (the schemaless DSL twin) does not accept `$like` yet; its explicit intent
    keywords (`$has`, `$hasAny`, …) would take `$like` naturally the day a vector adapter can honor
    it. Added then, not now.
+
+## 2. C# 14 array `Contains` normalization — SHIPPED — 2026-09-12
+
+**Application intent.** A normal scoped Entity query such as
+`ParticipantIdentity.Query(x => ids.Contains(x.ParticipantId))` keeps the closed identifier set in
+the provider query instead of degrading to a `ClrFilter` and hydrating unrelated records.
+
+**Complete expression.** The application keeps its existing closed `T[]` (captured or inline) and
+ordinary LINQ predicate. No package, cast, explicit `Enumerable.Contains`, configuration, context,
+or provider-specific AST is added.
+
+**Guarantee/correction.** C# 14 binds array extension calls to the standard
+`MemoryExtensions.Contains<T>(ReadOnlySpan<T>, T)` method in expression trees. The LINQ input adapter
+normalizes that compiler shape to the same `FilterOperator.In` node as the older
+`Enumerable.Contains` shape. Recognition is signature- and operand-qualified: comparer overloads,
+nonstandard methods merely named `Contains`, entity-dependent sets, and non-array span expressions
+remain `ClrFilter` residuals rather than acquiring equality semantics Koan cannot preserve.
+
+**Coalescence and ergonomics.** `LinqFilterCompiler` remains the one owner because every record
+adapter consumes its normalized filter AST. No adapter translator changes and no second compatibility
+layer are introduced. The human- and agent-readable `ids.Contains(x.Id)` expression works unchanged
+on .NET 10/C# 14.
+
+**Evidence boundary.** The Data Filtering suite must assert the actual C# 14 method owner, structured
+AST shape, captured and inline array semantics, retained comparer residual, and unchanged
+`Enumerable.Contains` behavior. Tangent's native SQLite query receipt remains the consumer-side
+performance qualification.
+
+**Evidence.** A pre-fix focused run passed 14/16 and failed only the captured and inline C# 14 array
+forms because both compiled to `ClrFilter`. After normalization, the complete Data Filtering suite
+passed 112/112 with zero skips on .NET SDK 10.0.401. The focused controls prove explicit
+`Enumerable.Contains` remains structured while comparer-bearing, entity-dependent, and unrelated
+`Contains` calls remain residual. Consumer revision `e07a84cc3` supplies the SQLite performance
+qualification that exposed the fallback amplification.

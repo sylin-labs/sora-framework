@@ -41,9 +41,78 @@ public sealed class LinqFilterCompilerSpecs
     public void Scalar_in_converges_with_dsl()
     {
         var levels = new[] { 10, 30 };
-        var linq = ByLinq(g => levels.Contains(g.Level));
+        Expression<Func<Gamer, bool>> predicate = g => levels.Contains(g.Level);
+        var call = predicate.Body.Should().BeAssignableTo<MethodCallExpression>().Subject;
+        call.Method.DeclaringType.Should().Be(typeof(MemoryExtensions),
+            "C# 14 prefers the span overload for an array receiver");
+
+        var field = LinqFilterCompiler.Compile(predicate).Should().BeOfType<FieldFilter>().Subject;
+        field.Field.ToString().Should().Be(nameof(Gamer.Level));
+        field.Operator.Should().Be(FilterOperator.In);
+        field.Value.Should().BeOfType<FilterValue.Set>().Which.Values.Should().Equal(10, 30);
+
+        var linq = Run(field);
         linq.Should().Equal("g1", "g3");
         linq.Should().Equal(ByDsl("{ \"Level\": { \"$in\": [10, 30] } }"));
+    }
+
+    [Fact]
+    public void Scalar_in_from_inline_array_lowers_to_structured_filter()
+    {
+        Expression<Func<Gamer, bool>> predicate = g => new[] { 10, 30 }.Contains(g.Level);
+        predicate.Body.Should().BeAssignableTo<MethodCallExpression>()
+            .Which.Method.DeclaringType.Should().Be(typeof(MemoryExtensions));
+
+        var field = LinqFilterCompiler.Compile(predicate).Should().BeOfType<FieldFilter>().Subject;
+        field.Field.ToString().Should().Be(nameof(Gamer.Level));
+        field.Operator.Should().Be(FilterOperator.In);
+        field.Value.Should().BeOfType<FilterValue.Set>().Which.Values.Should().Equal(10, 30);
+        Run(field).Should().Equal("g1", "g3");
+    }
+
+    [Fact]
+    public void Explicit_enumerable_contains_remains_structured()
+    {
+        var levels = new[] { 10, 30 };
+        Expression<Func<Gamer, bool>> predicate = g => Enumerable.Contains(levels, g.Level);
+        predicate.Body.Should().BeAssignableTo<MethodCallExpression>()
+            .Which.Method.DeclaringType.Should().Be(typeof(Enumerable));
+
+        LinqFilterCompiler.Compile(predicate).Should().BeOfType<FieldFilter>()
+            .Which.Operator.Should().Be(FilterOperator.In);
+    }
+
+    [Fact]
+    public void Memory_contains_with_comparer_remains_clrfilter()
+    {
+        var names = new[] { "leo", "max" };
+        Expression<Func<Gamer, bool>> predicate =
+            g => names.Contains(g.Name, StringComparer.OrdinalIgnoreCase);
+        var call = predicate.Body.Should().BeAssignableTo<MethodCallExpression>().Subject;
+        call.Method.DeclaringType.Should().Be(typeof(MemoryExtensions));
+        call.Arguments.Should().HaveCount(3);
+
+        LinqFilterCompiler.Compile(predicate).Should().BeOfType<ClrFilter>(
+            "a comparer changes equality semantics and cannot be represented by a default In node");
+    }
+
+    [Fact]
+    public void Entity_dependent_memory_contains_source_remains_clrfilter()
+    {
+        Expression<Func<Gamer, bool>> predicate = g => g.Games.ToArray().Contains(g.Name);
+        predicate.Body.Should().BeAssignableTo<MethodCallExpression>()
+            .Which.Method.DeclaringType.Should().Be(typeof(MemoryExtensions));
+
+        LinqFilterCompiler.Compile(predicate).Should().BeOfType<ClrFilter>();
+    }
+
+    [Fact]
+    public void Unrelated_method_named_contains_remains_clrfilter()
+    {
+        var levels = new[] { 10, 30 };
+        Expression<Func<Gamer, bool>> predicate = g => Contains(levels, g.Level);
+
+        LinqFilterCompiler.Compile(predicate).Should().BeOfType<ClrFilter>();
     }
 
     [Fact]
@@ -115,4 +184,6 @@ public sealed class LinqFilterCompilerSpecs
         compiled.Should().BeOfType<ClrFilter>();
         Run(compiled).Should().BeEmpty();
     }
+
+    private static bool Contains(IEnumerable<int> values, int value) => values.Contains(value);
 }

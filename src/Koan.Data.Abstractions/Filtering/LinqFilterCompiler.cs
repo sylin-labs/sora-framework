@@ -98,30 +98,25 @@ public static class LinqFilterCompiler
             if (op is { } sop) { filter = new FieldFilter(sp, sop, FilterValue.Of(Eval(mc.Arguments[0]))); return true; }
         }
 
-        // collection / scalar Contains (instance List<T>.Contains or static Enumerable.Contains)
-        if (mc.Method.Name == nameof(Enumerable.Contains))
+        // collection / scalar Contains. C# 14 prefers MemoryExtensions.Contains for array receivers,
+        // represented as an array-to-ReadOnlySpan op_Implicit inside the expression tree. Normalize
+        // that exact standard-library shape back to its closed array before evaluating the set.
+        if (TryContainsOperands(mc, out var source, out var item))
         {
-            Expression? source = null, item = null;
-            if (mc.Object is not null && mc.Arguments.Count == 1) { source = mc.Object; item = mc.Arguments[0]; }
-            else if (mc.Method.DeclaringType == typeof(Enumerable) && mc.Arguments.Count == 2) { source = mc.Arguments[0]; item = mc.Arguments[1]; }
-
-            if (source is not null && item is not null)
+            // member-collection.Contains(constant) -> Has. The item must be a closed constant
+            // (not merely a non-path): an entity-derived item must not be Eval()'d.
+            if (IsCollectionType(source.Type) && TryMemberPath(source, param, rootType, out var colPath)
+                && !ReferencesParam(item, param))
             {
-                // member-collection.Contains(constant) -> Has. The item must be a closed constant
-                // (not merely a non-path): an entity-derived item must not be Eval()'d.
-                if (IsCollectionType(source.Type) && TryMemberPath(source, param, rootType, out var colPath)
-                    && !ReferencesParam(item, param))
-                {
-                    filter = new FieldFilter(colPath, FilterOperator.Has, FilterValue.Of(Eval(item)));
-                    return true;
-                }
-                // constant-collection.Contains(member-scalar) -> In. The source set must be closed.
-                if (TryMemberPath(item, param, rootType, out var scalarPath)
-                    && !ReferencesParam(source, param))
-                {
-                    filter = new FieldFilter(scalarPath, FilterOperator.In, ToSet(Eval(source)));
-                    return true;
-                }
+                filter = new FieldFilter(colPath, FilterOperator.Has, FilterValue.Of(Eval(item)));
+                return true;
+            }
+            // constant-collection.Contains(member-scalar) -> In. The source set must be closed.
+            if (TryMemberPath(item, param, rootType, out var scalarPath)
+                && !ReferencesParam(source, param))
+            {
+                filter = new FieldFilter(scalarPath, FilterOperator.In, ToSet(Eval(source)));
+                return true;
             }
         }
 
@@ -178,6 +173,96 @@ public static class LinqFilterCompiler
     };
 
     private static bool IsCollectionType(Type t) => FieldPathResolver.TryGetElementType(t) is not null;
+
+    private static bool TryContainsOperands(MethodCallExpression call, out Expression source, out Expression item)
+    {
+        source = item = null!;
+        var method = call.Method;
+        if (method.Name != nameof(Enumerable.Contains) || method.ReturnType != typeof(bool)) return false;
+
+        // Preserve supported instance collection calls while requiring an actual collection receiver
+        // and a one-element membership signature rather than matching an arbitrary method by name.
+        if (!method.IsStatic && call.Object is not null && call.Arguments.Count == 1
+            && IsCollectionType(call.Object.Type) && method.GetParameters().Length == 1)
+        {
+            source = call.Object;
+            item = call.Arguments[0];
+            return true;
+        }
+
+        // Enumerable.Contains<T>(IEnumerable<T>, T), excluding the comparer overload.
+        if (method.IsStatic && method.DeclaringType == typeof(Enumerable)
+            && method.IsGenericMethod && method.GetGenericArguments().Length == 1
+            && call.Arguments.Count == 2 && method.GetParameters().Length == 2)
+        {
+            source = call.Arguments[0];
+            item = call.Arguments[1];
+            return true;
+        }
+
+        // MemoryExtensions.Contains<T>(ReadOnlySpan<T>, T), excluding comparer and char/string
+        // overloads. Only the compiler's standard T[] -> span conversion is safe to unwrap: arbitrary
+        // span producers cannot be evaluated through Expression.Compile and remain a ClrFilter.
+        if (method.IsStatic && method.DeclaringType == typeof(MemoryExtensions)
+            && method.IsGenericMethod && method.GetGenericArguments() is [var elementType]
+            && call.Arguments.Count == 2 && method.GetParameters() is [var spanParameter, var itemParameter]
+            && IsSpanOf(spanParameter.ParameterType, elementType)
+            && itemParameter.ParameterType == elementType
+            && TryUnwrapArrayToSpan(call.Arguments[0], spanParameter.ParameterType, elementType, out var array))
+        {
+            source = array;
+            item = call.Arguments[1];
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryUnwrapArrayToSpan(
+        Expression expression,
+        Type expectedSpanType,
+        Type elementType,
+        out Expression array)
+    {
+        array = null!;
+
+        if (expression is UnaryExpression conversion
+            && conversion.NodeType is ExpressionType.Convert or ExpressionType.ConvertChecked
+            && conversion.Method is { IsSpecialName: true, Name: "op_Implicit" } conversionMethod
+            && conversion.Type == expectedSpanType
+            && IsSpanType(conversionMethod.DeclaringType))
+        {
+            expression = conversion.Operand;
+        }
+        else if (expression is MethodCallExpression conversionCall
+            && conversionCall.Object is null && conversionCall.Arguments.Count == 1
+            && conversionCall.Method is { IsSpecialName: true, Name: "op_Implicit" }
+            && conversionCall.Type == expectedSpanType
+            && IsSpanType(conversionCall.Method.DeclaringType))
+        {
+            expression = conversionCall.Arguments[0];
+        }
+        else
+        {
+            return false;
+        }
+
+        expression = Unwrap(expression);
+        if (!expression.Type.IsArray || expression.Type.GetArrayRank() != 1
+            || expression.Type.GetElementType() != elementType)
+            return false;
+
+        array = expression;
+        return true;
+    }
+
+    private static bool IsSpanOf(Type type, Type elementType)
+        => IsSpanType(type) && type.GetGenericArguments()[0] == elementType;
+
+    private static bool IsSpanType(Type? type)
+        => type is { IsGenericType: true }
+            && type.GetGenericTypeDefinition() is var definition
+            && (definition == typeof(Span<>) || definition == typeof(ReadOnlySpan<>));
 
     private static bool TryMemberPath(Expression e, ParameterExpression param, Type rootType, out FieldPath path)
     {
