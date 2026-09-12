@@ -8,7 +8,7 @@ last_updated: 2026-09-12
 framework_version: v1.0.0
 validation:
   status: passed
-  scope: Data Core owner suite, SQLite provider-bounded paging, and independent pinned-runtime SQLite/Mongo evidence
+  scope: Data Core owner suite, SQLite provider-bounded paging, independent pinned-runtime provider evidence, and release 34716171377
 ---
 
 # AE-19 — Data transaction and query truth
@@ -130,4 +130,9 @@ recovery workflow or remodel one aggregate into a qualifying native batch.
   `E:/repo/github/sylin-org/tangent-space/.local/experiments/epic005/mongo-baseline-d342e81c22a942798f0b819666fd0765/result.json`.
 - Current-guide/source search rejects claims that deferred coordination is atomic or a transactional
   outbox; historical ADRs and assessment evidence remain dated records rather than rewritten history.
-- No full release certification, publication, consumer pin change, or cross-provider atomicity claim.
+- [Release 34716171377](https://github.com/sylin-org/koan-framework/actions/runs/34716171377)
+  planned, packed, proved, and published 82 packages from `e9b3f2e716b58f0c3a07623ce92a721229403927`.
+  Direct NuGet flat-container probes returned HTTP 200 for Data Core 1.0.69, Cache 1.0.59,
+  PostgreSQL connector 1.0.62, and SQLite connector 1.0.69 after registry validation.
+- No Tangent consumer pin change or cross-provider atomicity claim was made. Consumer adoption and
+  native cross-Entity transaction design remain separate gates.

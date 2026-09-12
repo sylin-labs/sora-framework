@@ -23,6 +23,10 @@ with links to the actual deliverable and evidence.
   dependencies. The independent application-evolution research remains planned.
 - Published increment: AE-12 insertion, AE-13 enum names and AE-14 additive collection construction reached NuGet.org through release 34411628984 at `7ceb16c9f`. Gposingway verified all 33 app and 35 test Koan dependencies against that public plan; its four enum/body-binding failures now pass.
 - Latest published increment: AE-15 keyed lease lifetime, AE-16 typed PATCH restoration, AE-17 ordered cache removal and AE-18 claimed gate state. All passed independent review and owner tests. Six dependency stamp commits settled at `4890ca83c`; all eight coherence legs passed, with the same 21 existing build warning lines and none added. Release 34421172932 published 99 new packages. Gposingway restored the exact plan, verified all 33 app and 35 test package origins at NuGet.org, and passed all six HTTP write-policy cases, including the three prior PATCH failures. Its routing and facet freshness acceptance is recorded in the consumer completion below.
+- AE-19 corrected deferred-transaction truth, removed implicit count work from list-returning queries,
+  and restored public batch capability transparency. Release 34716171377 published 82 packages from
+  `e9b3f2e71`; Data Core 1.0.69 and representative Cache/PostgreSQL/SQLite packages returned HTTP 200
+  from NuGet.org. Consumer adoption and native cross-Entity transactions remain separate gates.
 - Consumer completion: Gposingway completed its final 1,228 backend and 24 frontend checks, copied-data
   compatibility and existing-container journeys, then deployed the public-package candidate. Its
   [deployment receipt](https://github.com/gposingway/gposingway-org/blob/dev/docs/deployments/2026-09-10-meaningful-capabilities.md)
@@ -54,13 +58,24 @@ with links to the actual deliverable and evidence.
 | [AE-16 Typed PATCH](work-items/16-typed-patch-restoration.md) | done | Typed copy restoration, recursive writable admission, explicit null defaults and exact dictionary keys. 139 Web, 32 Data, 14 PatchOps, 95 in-memory, 59 JSON and five Canon controls pass. Independent review, release 34421172932 and all three formerly failing public GW PATCH cases pass. The [internal public consumer exercise](evidence/AE-16-consumer.md) adds 192 verifier checks, including 24 PATCH checks, with reviewed provenance. |
 | [AE-17 Ordered cache removal](work-items/17-ordered-cache-removal.md) | done | Existing gate orders removal with fills and backfills; all started tier writes settle before failure escapes. Seven ordering and all 82 owner cases pass, with independent review. Published in release 34421172932 and restored from NuGet.org; all fifteen application facet-cache controls and its final acceptance pass. |
 | [AE-18 Claimed job gate](work-items/18-job-claimed-gate-state.md) | done | Optional immutable JobState.GateKey exposes existing claim without ledger reads. Nine in-memory and four Mongo cases pass; independent review, release 34421172932 and public package adoption pass. Gposingway routing and cooperative host-replacement acceptance pass. |
-| [AE-19 Data transaction and query truth](work-items/19-data-transaction-and-query-truth.md) | done | Deferred coordination now narrates and proves its durable-prefix boundary; list queries preserve null count intent; public batches expose only jointly qualified execution capabilities. All 561 Data Core owner checks and two focused SQLite checks pass. Native cross-Entity atomicity remains a separate provider-family design gate. |
+| [AE-19 Data transaction and query truth](work-items/19-data-transaction-and-query-truth.md) | done | Deferred coordination now narrates and proves its durable-prefix boundary; list queries preserve null count intent; public batches expose only jointly qualified execution capabilities. All 561 Data Core owner checks and two focused SQLite checks pass. Release 34716171377 published 82 packages; representative NuGet probes pass. Native cross-Entity atomicity remains a separate provider-family design gate. |
 
 Use `in-progress`, `blocked`, `done`, or `stopped` as execution proceeds. A blocker names the
 missing input and useful restart point; stopped work retains its findings. Front matter in
 the charter and cards describes document status, not successful implementation.
 
 ## Decisions and history
+
+### 2026-09-12 — Data execution truth published
+
+- Commit `f75fb79a5` aligned ambient transaction narration with its durable-prefix receipt, preserved
+  count-free intent on list queries, and forwarded jointly qualified batch execution capabilities.
+- Four generated dependency-floor commits reached quiescence (`0 stamped, 107 unchanged`) at
+  `e9b3f2e71`; `main` fast-forwarded from `dev` without a merge commit.
+- [Release 34716171377](https://github.com/sylin-org/koan-framework/actions/runs/34716171377)
+  passed planning, packing, package-only application proof, and isolated publication for 82 packages.
+- Direct NuGet probes returned HTTP 200 for Data Core 1.0.69, Cache 1.0.59, PostgreSQL connector
+  1.0.62, and SQLite connector 1.0.69. Tangent's consumer pin remains unchanged.
 
 ### 2026-09-05 — Published dependency path proved; local preparation removed
 
