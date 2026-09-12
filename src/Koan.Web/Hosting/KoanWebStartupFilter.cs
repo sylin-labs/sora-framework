@@ -46,12 +46,6 @@ internal sealed class KoanWebStartupFilter(IOptions<KoanWebOptions> options, IOp
                 {
                     app.UseExceptionHandler();
                 }
-                var webEnvironment = app.ApplicationServices.GetRequiredService<IWebHostEnvironment>();
-                if (opts.EnableStaticFiles && webEnvironment.WebRootFileProvider is not NullFileProvider)
-                {
-                    app.UseDefaultFiles();
-                    app.UseStaticFiles();
-                }
                 if (opts.EnableSecureHeaders && !opts.IsProxiedApi)
                 {
                     app.Use((ctx, next) =>
@@ -74,6 +68,13 @@ internal sealed class KoanWebStartupFilter(IOptions<KoanWebOptions> options, IOp
                         });
                         return next();
                     });
+                }
+                // Static/default files can terminate the pipeline, so register response headers first.
+                var webEnvironment = app.ApplicationServices.GetRequiredService<IWebHostEnvironment>();
+                if (opts.EnableStaticFiles && webEnvironment.WebRootFileProvider is not NullFileProvider)
+                {
+                    app.UseDefaultFiles();
+                    app.UseStaticFiles();
                 }
                 // Lightweight health alias: if configured, respond to GET {HealthPath} with { status: "ok" }
                 if (!string.IsNullOrWhiteSpace(opts.HealthPath))

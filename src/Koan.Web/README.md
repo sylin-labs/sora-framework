@@ -11,6 +11,7 @@ Turn Koan entities into controller-first ASP.NET Core APIs, with shared policy, 
 - attribute-routed ASP.NET Core MVC integration
 - health and optional OpenAPI wiring
 - static-file middleware only when the host supplies a real web-root provider
+- the same configured security headers on default/static files and API responses
 - redacted runtime facts at `GET /.well-known/Koan/facts`
 - response transformers for deliberate representation shaping
 - one ordered request-context contributor lifecycle for validated principal, tenant, and Entity read context

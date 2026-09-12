@@ -40,6 +40,9 @@ expansion no adapter can serve fails closed with `422`; a response past the safe
 - Avoid inline endpoints; keep routing in controllers
 - `EnableStaticFiles` retains Koan's conventional static-file wiring, but middleware is skipped when
   ASP.NET exposes `NullFileProvider`; API-only applications therefore need no empty `wwwroot` folder.
+- When `EnableSecureHeaders` is true and `IsProxiedApi` is false, the existing header middleware wraps
+  default/static-file responses as well as controllers. Optional configured CSP and app-supplied header
+  values retain the same behavior; static middleware cannot short-circuit header normalization.
 
 ## Usage guidance
 
