@@ -1,3 +1,17 @@
+---
+type: DEV
+domain: web
+title: "Tangent AT authentication protocol seam"
+audience: [framework-authors, maintainers, contributors]
+status: resolved
+last_updated: 2026-09-12
+framework_version: v1.0.0
+validation:
+  date_last_tested: 2026-09-12
+  status: tested
+  scope: protocol seam, native atproto connector, authentication regressions, and sample build
+---
+
 # Tangent AT authentication protocol seam
 
 Status: implemented and locally validated; reduced contract approved by coordinator; not published.

@@ -1,3 +1,17 @@
+---
+type: DEV
+domain: web
+title: "Static responses inherit Web security headers"
+audience: [framework-authors, maintainers, contributors]
+status: resolved
+last_updated: 2026-09-12
+framework_version: v1.0.0
+validation:
+  date_last_tested: 2026-09-12
+  status: tested
+  scope: enabled, disabled, and proxied static-response security-header behavior
+---
+
 # Static responses inherit Web security headers
 
 **Task:** Correct the Web pipeline order so static/default-file responses receive the existing configured security headers.
