@@ -4,7 +4,7 @@ domain: framework
 title: "Application evolution progress"
 audience: [maintainers, ai-agents]
 status: current
-last_updated: 2026-09-10
+last_updated: 2026-09-12
 framework_version: v1.0.0
 validation:
   status: reviewed
@@ -54,6 +54,7 @@ with links to the actual deliverable and evidence.
 | [AE-16 Typed PATCH](work-items/16-typed-patch-restoration.md) | done | Typed copy restoration, recursive writable admission, explicit null defaults and exact dictionary keys. 139 Web, 32 Data, 14 PatchOps, 95 in-memory, 59 JSON and five Canon controls pass. Independent review, release 34421172932 and all three formerly failing public GW PATCH cases pass. The [internal public consumer exercise](evidence/AE-16-consumer.md) adds 192 verifier checks, including 24 PATCH checks, with reviewed provenance. |
 | [AE-17 Ordered cache removal](work-items/17-ordered-cache-removal.md) | done | Existing gate orders removal with fills and backfills; all started tier writes settle before failure escapes. Seven ordering and all 82 owner cases pass, with independent review. Published in release 34421172932 and restored from NuGet.org; all fifteen application facet-cache controls and its final acceptance pass. |
 | [AE-18 Claimed job gate](work-items/18-job-claimed-gate-state.md) | done | Optional immutable JobState.GateKey exposes existing claim without ledger reads. Nine in-memory and four Mongo cases pass; independent review, release 34421172932 and public package adoption pass. Gposingway routing and cooperative host-replacement acceptance pass. |
+| [AE-19 Data transaction and query truth](work-items/19-data-transaction-and-query-truth.md) | done | Deferred coordination now narrates and proves its durable-prefix boundary; list queries preserve null count intent; public batches expose only jointly qualified execution capabilities. All 561 Data Core owner checks and two focused SQLite checks pass. Native cross-Entity atomicity remains a separate provider-family design gate. |
 
 Use `in-progress`, `blocked`, `done`, or `stopped` as execution proceeds. A blocker names the
 missing input and useful restart point; stopped work retains its findings. Front matter in

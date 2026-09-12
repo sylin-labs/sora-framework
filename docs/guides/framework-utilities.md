@@ -4,7 +4,7 @@ domain: core
 title: "Framework Utilities Guide"
 audience: [developers, architects, ai-agents]
 status: current
-last_updated: 2026-07-17
+last_updated: 2026-09-12
 framework_version: v1.0.0
 validation:
   date_last_tested: 2026-07-17
@@ -550,11 +550,13 @@ Two defaults make *an entity a consistency unit*, so handlers don't lose writes:
 
 - **In-memory** (no durable data adapter): fast and explicitly ephemeral.
 - **Durable** (SQLite/Postgres/Mongo/SQL Server or another durable Data provider): a Data-backed ledger over `Entity<JobRecord>`;
-  transactional outbox (a `Submit` inside an ambient transaction enqueues on commit) and **retention** are automatic —
+  ambient submission is deferred until the coordinator's commit sequence (not an atomic outbox), and **retention** is automatic —
   the sweep purges Completed/Cancelled past `ArchiveAfter` (7d) and Failed/Dead past `FailedAfter` (30d), with an
   optional per-work-type count cap (`RetainPerWorkType`). On a TTL-capable store (Mongo) a native TTL index on the
   per-outcome `ExpireAt` (`[Index(Ttl)]` / `DataCaps.Retention.TtlIndex`) expires terminal rows continuously between
   sweeps; the sweep stays the universal backstop (§20.4). Ledger reads are pushed down (indexed claim/dashboard queries).
+  A later failure in the same ambient sequence can leave the saved Entity without its job; invariants that require
+  durable publication need one atomic aggregate or application-owned idempotent recovery.
 - **Distributed** (several nodes on one store): competing consumers use the adapter's conditional compare-and-set
   capability automatically. SQLite/Postgres/SqlServer/Mongo admit only one claimant per ready ledger row; adapters
   without that capability retain the honest optimistic at-least-once fallback. Resource gates are honored cross-node.

@@ -224,16 +224,19 @@ public static class EntityContext
     public static IDisposable RefreshCache() => WithCacheBehavior(CacheBehavior.Refresh);
 
     /// <summary>
-    /// Start a named transaction. Operations will be tracked and committed/rolled back atomically.
-    /// Transaction commits automatically on dispose unless explicitly rolled back.
+    /// Start a named deferred-coordination scope. Entity operations are held until <see cref="Commit"/>,
+    /// then executed sequentially; this is not a native or distributed atomic transaction. A failed commit
+    /// can leave a durable prefix, and <see cref="Rollback"/> discards only operations not yet dispatched.
+    /// By default disposal rolls back pending work; auto-commit on dispose is an explicit option.
     /// </summary>
     /// <param name="name">Transaction name for correlation and telemetry</param>
-    /// <returns>Disposable that auto-commits on successful disposal</returns>
+    /// <returns>A disposable scope that discards pending work on disposal unless auto-commit is configured</returns>
     /// <exception cref="InvalidOperationException">Thrown when already in a transaction (nested transactions not supported)</exception>
     public static IDisposable Transaction(string name) => With(transaction: name);
 
     /// <summary>
-    /// Commit the current transaction. All tracked operations are executed and committed across adapters.
+    /// Execute the current scope's tracked operations sequentially across adapters. This completion boundary
+    /// is non-atomic and can fail after earlier operations have committed.
     /// Idempotent no-op when there is no active transaction (or it has already completed) — calling Commit
     /// without a transaction, or twice, never throws.
     /// </summary>
@@ -247,7 +250,8 @@ public static class EntityContext
     }
 
     /// <summary>
-    /// Rollback the current transaction. All tracked operations are discarded. Idempotent no-op when there
+    /// Roll back the current transaction by discarding tracked operations that have not been dispatched.
+    /// It cannot undo an operation completed before a failed commit. Idempotent no-op when there
     /// is no active transaction (or it has already completed) — calling Rollback without a transaction, or
     /// after a commit/rollback, never throws.
     /// </summary>
@@ -290,7 +294,7 @@ public static class EntityContext
             try
             {
                 // Disposed without an explicit Commit/Rollback. Default to ROLLBACK (safe — matches
-                // .NET TransactionScope): pending work persists only on an explicit Commit(), so forgetting
+                // .NET TransactionScope's scope-exit posture only): pending work persists only on an explicit Commit(), so forgetting
                 // to commit or an exception escaping the using-block discards it. Opt into the legacy
                 // auto-commit behavior via TransactionOptions.AutoCommitOnDispose = true.
                 if (_coordinator != null && !_coordinator.IsCompleted)

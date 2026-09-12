@@ -37,6 +37,9 @@ conditional on their earlier read or provide atomic mixed bulk writes.
   - `Item.Query(predicate, ct)`
   - `Item.FirstPage(size, ct)` and `Item.Page(pageNumber, pageSize, ct)`
   - `Item.QueryStream(predicate, ct)`
+- List-returning `All`/`Query` operations preserve null count intent, even with sort and pagination. Use
+  `QueryWithCount` when the caller needs a total; it defaults to the optimized count strategy unless the
+  query selects another strategy explicitly.
 - `AllStream`/`QueryStream` lazily compose numbered pages only when the selected adapter proves provider-bounded
   paging and complete ordering. Otherwise they reject correctively before query/yield; there is no materializing
   fallback. `batchSize` bounds Koan-visible candidates, not opaque driver buffers. No public cursor or resume-token
@@ -192,6 +195,9 @@ the ambient Koan host binding. ASP.NET Core and workers continue to use their na
   projection; discarded provider candidates never escape through Lifecycle.
 - Atomic batches and exact per-item outcomes are negotiated execution seams. `RequireAtomic` rejects before deferred
   mutation loads or callbacks when the selected adapter cannot prove it.
+- Ambient `EntityContext.Transaction` is deferred sequential coordination, not a native or distributed transaction.
+  A failed commit can leave its completed prefix durable; rollback discards only undispatched work. For one Entity
+  root, `BatchOptions(RequireAtomic: true)` is the qualified all-or-nothing seam.
 - Relationship expansion is direct-edge and budgeted. It is not recursive graph traversal, snapshot isolation, or a
   promise that scan-backed providers can execute without an explicit candidate limit.
 - `EntityContext` owns Data routing dimensions only; tenancy, subject, and other semantic axes are contributed and

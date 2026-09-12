@@ -40,7 +40,7 @@ public interface ITransactionCoordinator
 
     /// <summary>
     /// Track a vector save operation for deferred execution.
-    /// Coordinates with entity operations to ensure transactional consistency.
+    /// Orders it with tracked entity operations without claiming atomic consistency.
     /// </summary>
     void TrackVectorSave<TEntity, TKey>(
         TKey id,
@@ -52,22 +52,22 @@ public interface ITransactionCoordinator
 
     /// <summary>
     /// Track a vector delete operation for deferred execution.
-    /// Coordinates with entity operations to ensure transactional consistency.
+    /// Orders it with tracked entity operations without claiming atomic consistency.
     /// </summary>
     void TrackVectorDelete<TEntity, TKey>(TKey id, EntityContext.ContextState context)
         where TEntity : class, IEntity<TKey>
         where TKey : notnull;
 
     /// <summary>
-    /// Commit all tracked operations across all adapters.
+    /// Execute all tracked operations across all adapters.
     /// Executes tracked operations sequentially. A failure can leave partial state and reports an unknown commit
     /// outcome; the coordinator never replays dispatched work.
     /// </summary>
-    /// <exception cref="TransactionException">If any adapter fails to commit</exception>
+    /// <exception cref="TransactionException">If any operation fails after zero or more earlier operations completed</exception>
     Task Commit(CancellationToken ct = default);
 
     /// <summary>
-    /// Rollback all tracked operations and mark transaction as completed.
+    /// Discard all undispatched tracked operations and mark the scope as completed.
     /// </summary>
     Task Rollback(CancellationToken ct = default);
 

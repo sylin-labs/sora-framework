@@ -416,6 +416,8 @@ internal sealed class CachedRepository<TEntity, TKey> :
             _inner = inner;
         }
 
+        public BatchExecutionCapabilities ExecutionCapabilities => _inner.ExecutionCapabilities;
+
         public IBatchSet<TEntity, TKey> Add(TEntity entity)
         {
             _upserts.Add(entity);

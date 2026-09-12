@@ -130,6 +130,8 @@ internal sealed class EntityVariantRepository<TRoot, TVariant, TKey> :
 
     private sealed class VariantBatch(IBatchSet<TRoot, TKey> root) : IBatchSet<TVariant, TKey>
     {
+        public BatchExecutionCapabilities ExecutionCapabilities => root.ExecutionCapabilities;
+
         public IBatchSet<TVariant, TKey> Add(TVariant entity)
         {
             root.Add(entity);

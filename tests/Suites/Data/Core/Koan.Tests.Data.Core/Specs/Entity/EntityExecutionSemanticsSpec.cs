@@ -215,6 +215,29 @@ public sealed class EntityExecutionSemanticsSpec
     }
 
     [Fact]
+    public void Batch_facade_exposes_only_the_execution_capabilities_proved_by_both_provider_and_native_batch()
+    {
+        var qualified = new ReceiptRepository(advertiseAtomic: true);
+        qualified.Batch.Capabilities = BatchExecutionCapabilities.Atomic |
+                                       BatchExecutionCapabilities.CompleteItemOutcomes;
+
+        var qualifiedBatch = new RepositoryFacade<ReceiptEntity, string>(qualified).CreateBatch();
+
+        qualifiedBatch.ExecutionCapabilities.Should().Be(
+            BatchExecutionCapabilities.Atomic | BatchExecutionCapabilities.CompleteItemOutcomes);
+
+        var unadvertised = new ReceiptRepository();
+        unadvertised.Batch.Capabilities = BatchExecutionCapabilities.Atomic |
+                                          BatchExecutionCapabilities.CompleteItemOutcomes;
+
+        var conservativeBatch = new RepositoryFacade<ReceiptEntity, string>(unadvertised).CreateBatch();
+
+        conservativeBatch.ExecutionCapabilities.Should().Be(
+            BatchExecutionCapabilities.CompleteItemOutcomes,
+            "native atomicity is public only when the provider capability fact also qualifies it");
+    }
+
+    [Fact]
     public async Task False_atomic_receipt_rejects_after_one_dispatch_without_replay()
     {
         var repository = new ReceiptRepository(advertiseAtomic: true);

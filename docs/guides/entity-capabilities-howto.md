@@ -4,7 +4,7 @@ domain: data
 title: "Entity Capabilities How-To"
 audience: [developers, architects]
 status: current
-last_updated: 2026-08-29
+last_updated: 2026-09-12
 framework_version: v1.0.0
 validation:
   status: not-yet-tested
@@ -862,14 +862,18 @@ using (EntityContext.Partition("cold-archive"))
 
 **Concepts**
 
-Sometimes you need multiple operations to succeed or fail together—creating a project with initial tasks, transferring inventory between warehouses, or importing a batch of related records.
+Sometimes you need to collect several operations, validate the complete intended set, and dispatch them
+from one explicit commit point—creating a project with initial tasks, synchronizing two stores, or
+importing a batch of related records.
 
-Koan's ambient transaction support coordinates entity operations across multiple adapters with best-effort atomicity. Operations are tracked in memory and executed on commit.
+Koan's ambient transaction support is a deferred coordinator, not a native or distributed transaction.
+Operations are tracked in memory and executed sequentially on commit. A later failure can therefore
+leave the successfully completed prefix durable.
 
 **Key features:**
 - Auto-commit on dispose (minimal cognitive load)
 - Named transactions for telemetry correlation
-- Works across different adapters (best-effort)
+- Can sequence work across different adapters without claiming atomicity
 
 **Recipe**
 
@@ -893,9 +897,9 @@ from `Koan:Data:Transactions`:
 
 **Sample**
 
-**Disposing does not commit.** Pending work persists only on an explicit `Commit`, which is what makes
-an exception escaping the block safe: the scope disposes, nothing was committed, and the writes are
-discarded. This matches `TransactionScope` in .NET.
+**Disposing does not commit by default.** Before commit starts, pending work persists only on an explicit
+`Commit`: an exception escaping the block causes scope disposal to discard the undispatched operations.
+Once commit starts, however, completed operations cannot be rolled back by this coordinator.
 
 ```csharp
 using (EntityContext.Transaction("create-project"))
@@ -913,10 +917,11 @@ using (EntityContext.Transaction("create-project"))
 }
 ```
 
-Set `AutoCommitOnDispose` to `true` where a scope that exits cleanly should commit itself. It is off by
-default because the failure it prevents -- losing writes -- is louder than the one it introduces.
+Set `AutoCommitOnDispose` to `true` where a scope that exits cleanly should dispatch its tracked work.
+It is off by default so the application must name the commit point. This option changes when dispatch
+begins; it does not add atomicity.
 
-**Rolling back on a validation failure:**
+**Discarding pending work after a validation failure:**
 
 ```csharp
 using (EntityContext.Transaction("batch-import"))
@@ -971,13 +976,19 @@ if (EntityContext.InTransaction && EntityContext.CurrentTransaction is { } trans
 **Usage Scenarios**
 
 - **Multi-step creation:** Projects with initial tasks, orders with line items
-- **Data migrations:** Rollback on failure for consistency
-- **Cross-adapter sync:** Coordinate primary + backup storage
-- **Batch imports:** All-or-nothing import with validation
+- **Pre-commit validation:** Inspect the intended set, then discard it before any dispatch
+- **Cross-adapter sync:** Sequence primary + backup writes with explicit recovery for partial completion
+- **Batch imports:** Defer dispatch until application validation is complete
 
 **Important notes:**
 
-⚠️ **Best-effort atomicity:** Koan provides sequential execution with error reporting, not distributed transactions. If adapter A commits and adapter B fails, A won't auto-rollback.
+⚠️ **Non-atomic coordination:** Koan provides sequential deferred execution with error reporting, not a
+native or distributed transaction. If operation A completes and operation B fails, A remains durable;
+`Rollback` can discard only work that has not yet been dispatched.
+
+⚠️ **Need atomic Entity writes?** For one Entity root on a provider that advertises native atomic batch
+support, use `Entity.Batch().Save(new BatchOptions(RequireAtomic: true))`. Koan does not currently expose
+an Entity-level atomic transaction spanning different Entity roots or data sources.
 
 ⚠️ **No nested transactions:** Attempting to nest throws `InvalidOperationException`.
 
@@ -985,7 +996,9 @@ if (EntityContext.InTransaction && EntityContext.CurrentTransaction is { } trans
 
 ⚠️ **Memory tracking:** For huge batches (10,000+ ops), break into smaller transactions to avoid memory pressure.
 
-**Pro tip:** Use auto-commit for simple scenarios. Only reach for explicit commit/rollback when you need conditional logic mid-transaction.
+**Pro tip:** Use the ambient coordinator for deferred sequencing and pre-commit validation. If the business
+invariant requires all-or-nothing durability, choose a qualified atomic batch or redesign the invariant
+as one aggregate until a native multi-Entity transaction seam is available.
 
 ---
 
@@ -1266,9 +1279,9 @@ an unbounded fallback.
 
 ### Symptom: Transaction doesn't rollback across adapters
 
-**Cause:** Best-effort atomicity—not true distributed transactions
-**Solution:** Design for idempotency; use compensation logic if needed
-**Prevention:** Document cross-adapter transaction limitations
+**Cause:** The ambient scope is a deferred sequential coordinator, not a native or distributed transaction
+**Solution:** Inspect the `TransactionException` receipt, then recover the completed prefix idempotently
+**Prevention:** Use the coordinator only where partial completion is acceptable; use a qualified atomic batch for one Entity root
 
 ### Symptom: "Client evaluation" warnings in logs
 

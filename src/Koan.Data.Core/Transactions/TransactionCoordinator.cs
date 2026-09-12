@@ -166,7 +166,7 @@ internal sealed class TransactionCoordinator : ITransactionCoordinator
         try
         {
             _logger.LogInformation(
-                "Transaction '{TransactionName}' committing {OperationCount} operations across {AdapterCount} adapter(s)",
+                "Deferred coordination '{TransactionName}' executing {OperationCount} operations across {AdapterCount} adapter(s)",
                 Name,
                 _operationsByAdapter.Values.Sum(list => list.Count),
                 _operationsByAdapter.Count);
@@ -180,14 +180,15 @@ internal sealed class TransactionCoordinator : ITransactionCoordinator
                 .EnterMany(bindings, $"deferred transaction '{Name}'", ct)
                 .ConfigureAwait(false);
 
-            // Execute operations per adapter (best-effort atomicity) inside one declared route horizon.
+            // Execute operations sequentially inside one declared route horizon. This does not create a native
+            // transaction, so a later failure can leave an earlier operation durable.
             await ExecuteOperations(ct);
 
             _isCompleted = true;
             stopwatch.Stop();
 
             _logger.LogInformation(
-                "Transaction '{TransactionName}' committed successfully in {ElapsedMs}ms",
+                "Deferred coordination '{TransactionName}' completed successfully in {ElapsedMs}ms",
                 Name,
                 stopwatch.ElapsedMilliseconds);
 

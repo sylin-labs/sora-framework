@@ -10,6 +10,7 @@ using Koan.Data.Abstractions.Sorting;
 using Koan.Data.Core.Model;
 using Koan.Data.Core.Querying;
 using Koan.Data.Core.Infrastructure;
+using Koan.Data.Core.Sorting;
 using Koan.Testing.Integration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -99,6 +100,38 @@ public sealed class EntityStreamingSpec : IAsyncLifetime
         fact.State.Should().Be(KoanFactState.Selected);
         fact.ReasonCode.Should().Be(Constants.Diagnostics.Reasons.ProviderBoundedPaging);
         fact.Summary.Should().Contain(nameof(StreamingRecord)).And.Contain("2");
+    }
+
+    [Fact]
+    public async Task Materialized_item_query_preserves_null_count_intent_while_explicit_count_still_counts()
+    {
+        var rows = new[]
+        {
+            Record(3, include: true),
+            Record(1, include: true),
+            Record(2, include: false)
+        };
+        var shaping = QueryDefinition.All
+            .WithSort<StreamingRecord>(sort => sort.OrderBy(record => record.Sequence))
+            .WithPagination(page: 1, pageSize: 2);
+        _repository.Reset(rows);
+
+        var items = await StreamingRecord.Query(record => record.Include, shaping);
+
+        items.Select(record => record.Sequence).Should().Equal(1, 3);
+        _repository.QueryCalls.Should().ContainSingle()
+            .Which.CountStrategy.Should().BeNull("the list-returning facade does not need a total");
+        _repository.CountCalls.Should().Be(0);
+
+        _repository.Reset(rows);
+        var counted = await StreamingRecord.QueryWithCount(
+            record => record.Include,
+            shaping.WithCountStrategy(CountStrategy.Exact));
+
+        counted.Items.Select(record => record.Sequence).Should().Equal(1, 3);
+        counted.TotalCount.Should().Be(2);
+        _repository.QueryCalls.Should().ContainSingle()
+            .Which.CountStrategy.Should().Be(CountStrategy.Exact);
     }
 
     [Fact]
@@ -665,12 +698,15 @@ public sealed class EntityStreamingSpec : IAsyncLifetime
             var pageSize = query.EffectivePageSize();
             var skip = Math.Max(query.EffectivePage() - 1, 0) * pageSize;
             var take = pageSize + (_returnOneExtraCandidate ? 1 : 0);
-            var page = candidates.Skip(skip).Take(take).ToList();
+            var selected = candidates.ToList();
+            var page = selected.Skip(skip).Take(take).ToList();
 
             return Task.FromResult(new RepositoryQueryResult<StreamingRecord>
             {
                 Items = page,
-                TotalCount = null,
+                FilterHandled = query.Filter is not null,
+                TotalCount = query.CountStrategy is null ? null : selected.Count,
+                CountExecution = query.CountStrategy is null ? CountExecutionKind.None : CountExecutionKind.Exact,
                 IsEstimate = false,
                 PaginationHandled = _paginationHandled,
                 SortHandled = _sortHandled

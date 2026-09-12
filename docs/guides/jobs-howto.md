@@ -4,12 +4,12 @@ domain: jobs
 title: "Background Jobs How-To"
 audience: [developers, architects]
 status: current
-last_updated: 2026-07-16
+last_updated: 2026-09-12
 framework_version: v1.0.0
 validation:
-  date_last_tested: 2026-07-16
+  date_last_tested: 2026-09-12
   status: verified
-  scope: in-memory Jobs; focused SQLite submission transaction
+  scope: transaction-bound submission wording checked against the deferred coordinator and durable-prefix regression
 related_guides:
   - ../reference/data/index.md
   - ../reference/web/index.md
@@ -495,7 +495,9 @@ compete to wake and claim from the shared ledger. This is purely a latency upgra
 still the truth, so a dropped or duplicated signal costs at most one poll interval and never
 correctness.
 
-**Transactional submit (outbox).** On the durable tier, a `Submit` inside an ambient transaction is part of that transaction—the job is enqueued **on commit** and **discarded on rollback**. So a job submitted as a side effect of saving an entity can never be "saved but never enqueued," and a rolled-back save never leaves a stray job:
+**Deferred submit (not an outbox).** On the durable tier, a `Submit` inside an ambient transaction is
+tracked with the surrounding Entity operations. It is dispatched in sequence on `Commit` and discarded
+if the scope is rolled back before commit begins:
 
 ```csharp
 using (EntityContext.Transaction("publish"))
@@ -507,7 +509,11 @@ using (EntityContext.Transaction("publish"))
 }
 ```
 
-No configuration—it's automatic whenever a transaction is in scope.
+No configuration is required whenever a transaction is in scope. This coordination is not atomic: a
+failure after the Entity save but before the job ledger write can leave the Entity durable without the
+job, while the reverse order can leave a job without a later Entity write. A business invariant that
+requires a durable outbox must model the intent in one atomic aggregate or add application-owned,
+idempotent recovery; the ambient coordinator alone does not provide that guarantee.
 
 **Retention.** A sweep keeps the active ledger lean three ways, all configurable in `JobsOptions` and all running every `ArchiveInterval` (default 1 h):
 

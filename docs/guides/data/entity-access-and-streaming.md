@@ -4,7 +4,7 @@ domain: data
 title: "Entity access and streaming"
 audience: [developers]
 status: current
-last_updated: 2026-09-10
+last_updated: 2026-09-12
 framework_version: v1.0.0
 validation:
   date_last_tested: 2026-07-15
@@ -34,6 +34,27 @@ Pass a `CancellationToken` to every one of them.
 
 ```csharp
 var all = await Product.All(ct); // full set; avoid for very large tables
+
+var ready = await Product.Query(
+    product => product.Ready,
+    QueryDefinition.All
+        .WithSort<Product>(sort => sort.OrderBy(product => product.Name))
+        .WithPagination(page: 1, pageSize: 100),
+    ct);
+```
+
+List-returning `All` and `Query` preserve a null count strategy, including when the definition carries
+sort or pagination. The adapter receives the requested rows without an implicit total-count request.
+Use `QueryWithCount` when the caller actually needs a total, and select `Exact`, `Fast`, or `Optimized`
+explicitly when the distinction matters:
+
+```csharp
+var page = await Product.QueryWithCount(
+    product => product.Ready,
+    QueryDefinition.All
+        .WithPagination(page: 1, pageSize: 100)
+        .WithCountStrategy(CountStrategy.Exact),
+    ct);
 ```
 
 ## Async iteration (provider-bounded)
@@ -122,6 +143,7 @@ envelope (`/.well-known/Koan/facts` and `koan://facts`) after the first enumerat
 - Treat a rejection as a capability mismatch; choose a qualified adapter or materialize explicitly.
 - Use page endpoints for APIs to control latency and memory.
 - Reserve `All()` for small sets or one-off maintenance scripts.
+- Use `QueryWithCount` only when the consumer needs a total; ordinary list queries do not ask for one.
 
 ## Related
 

@@ -1314,6 +1314,7 @@ internal sealed partial class RepositoryFacade<TEntity, TKey> :
     private sealed class BatchFacade : IBatchSet<TEntity, TKey>
     {
         private readonly RepositoryFacade<TEntity, TKey> _outer;
+        private IBatchSet<TEntity, TKey>? _native;
         private readonly List<TEntity> _adds = new();
         private readonly List<TEntity> _updates = new();
         private readonly List<TKey> _deletes = new();
@@ -1321,7 +1322,32 @@ internal sealed partial class RepositoryFacade<TEntity, TKey> :
         private readonly List<(BatchOperation Operation, int LocalIndex)> _logicalOperations = new();
         private bool _savingOrSaved;
 
-        public BatchFacade(RepositoryFacade<TEntity, TKey> outer) => _outer = outer;
+        public BatchFacade(RepositoryFacade<TEntity, TKey> outer)
+        {
+            _outer = outer;
+        }
+
+        private IBatchSet<TEntity, TKey> NativeBatch()
+            // Native construction is lazy so a forbidden source still rejects at Guard before its inner
+            // repository is touched. Once inspected or saved, retain the one plan that was described.
+            => _native ??= _outer._inner.CreateBatch()
+                ?? throw new InvalidOperationException(
+                    $"Repository for {typeof(TEntity).Name} returned a null batch set.");
+
+        public BatchExecutionCapabilities ExecutionCapabilities
+        {
+            get
+            {
+                var capabilities = NativeBatch().ExecutionCapabilities;
+                if (!DataCaps.Describe(_outer._inner, _outer._inner.GetType().Name)
+                        .Has(DataCaps.Write.AtomicBatch))
+                    capabilities &= ~BatchExecutionCapabilities.Atomic;
+                if (_outer._deleteOverride is not null && _deletes.Count != 0)
+                    capabilities &= ~(BatchExecutionCapabilities.Atomic |
+                                      BatchExecutionCapabilities.CompleteItemOutcomes);
+                return capabilities;
+            }
+        }
 
         public IBatchSet<TEntity, TKey> Add(TEntity entity)
         {
@@ -1381,9 +1407,9 @@ internal sealed partial class RepositoryFacade<TEntity, TKey> :
                 throw new NotSupportedException(
                     "Entity batches do not yet expose a proved idempotency contract. Remove IdempotencyKey; a dispatched batch is never replayed.");
 
-            // Create and qualify the native batch before deferred loads or Lifecycle callbacks. Construction is a
+            // Qualify the retained native batch before deferred loads or Lifecycle callbacks. Construction is a
             // pure execution-plan step; a provider must not open a resource or dispatch work from CreateBatch().
-            var native = _outer._inner.CreateBatch();
+            var native = NativeBatch();
             var nativeCapabilities = native.ExecutionCapabilities;
             if (options?.RequireAtomic == true)
             {

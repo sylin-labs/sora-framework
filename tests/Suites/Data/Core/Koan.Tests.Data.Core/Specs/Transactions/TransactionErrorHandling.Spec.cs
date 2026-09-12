@@ -1,5 +1,7 @@
 using Koan.Data.Abstractions;
+using Koan.Data.Abstractions.Failures;
 using Koan.Data.Core;
+using Koan.Data.Core.Lifecycle;
 using Koan.Data.Core.Model;
 using Koan.Data.Core.Transactions;
 using Koan.Tests.Data.Core.Support;
@@ -39,6 +41,49 @@ public sealed class TransactionErrorHandlingSpec
         }
 
         success.Should().BeTrue("empty transaction should commit successfully");
+    }
+
+    [Fact]
+    public async Task Failed_commit_reports_and_preserves_the_completed_prefix_without_replay()
+    {
+        await using var runtime = await DataCoreRuntimeFixture.CreateAsync(configureServices: _ =>
+            DeferredFailureEntity.Lifecycle.BeforeUpsert(context =>
+            {
+                if (context.Current.FailOnSave)
+                    throw new InvalidOperationException("deliberate second-operation failure");
+                return EntityLifecycleResult.Proceed();
+            }));
+
+        var partition = $"tx-partial-{Guid.CreateVersion7():n}";
+        var first = new DeferredFailureEntity { Id = "first" };
+        var second = new DeferredFailureEntity { Id = "second", FailOnSave = true };
+        var third = new DeferredFailureEntity { Id = "third" };
+        TransactionException failure;
+
+        using (EntityContext.Partition(partition))
+        using (EntityContext.Transaction("partial-prefix"))
+        {
+            await first.Save();
+            await second.Save();
+            await third.Save();
+
+            var commit = () => EntityContext.Commit();
+            failure = (await commit.Should().ThrowAsync<TransactionException>()).Which;
+        }
+
+        failure.CompletedOperationCount.Should().Be(1);
+        failure.CommitOutcome.Should().Be(DataCommitOutcome.Unknown);
+        failure.RetryDisposition.Should().Be(DataRetryDisposition.Never);
+        failure.ReplayDisposition.Should().Be(DataReplayDisposition.Never);
+
+        using (EntityContext.Partition(partition))
+        {
+            (await DeferredFailureEntity.Get(first.Id)).Should().NotBeNull(
+                "deferred coordination does not roll back an operation completed before a later failure");
+            (await DeferredFailureEntity.Get(second.Id)).Should().BeNull();
+            (await DeferredFailureEntity.Get(third.Id)).Should().BeNull(
+                "the coordinator stops at the failed operation and never dispatches or replays the suffix");
+        }
     }
 
     [Fact]
@@ -198,5 +243,10 @@ public sealed class TransactionErrorHandlingSpec
 
         entity1.Should().NotBeNull();
         entity2.Should().NotBeNull();
+    }
+
+    private sealed class DeferredFailureEntity : Entity<DeferredFailureEntity>
+    {
+        public bool FailOnSave { get; set; }
     }
 }

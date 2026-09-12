@@ -99,7 +99,7 @@ business operation so unusual routing stays visible and restores automatically.
 | `EntityContext.Source("Published")` | use one configured named source | move the default or copy existing data |
 | `EntityContext.Adapter("mongo")` | deliberately override the elected adapter | infer a package or guarantee provider parity |
 | `EntityContext.Partition("north")` | route to one physical/logical partition | authorize a tenant |
-| `EntityContext.Transaction("publish")` | coordinate supported work inside one Koan transaction | promise cross-provider atomicity |
+| `EntityContext.Transaction("publish")` | defer and sequentially coordinate supported work | provide native, cross-Entity, or cross-provider atomicity |
 | `Tenant.Use("acme")` | apply the ambient tenant boundary across participating pillars | create or authenticate the tenant |
 | `EntityContext.NoCache()` / `RefreshCache()` | bypass or refresh the Entity cache for this scope | change durable truth |
 

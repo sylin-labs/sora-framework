@@ -101,9 +101,20 @@ public static class Data<TEntity, TKey>
     // (residual + sort-fallback + paginate-after), centrally. Provider-bounded async streams use
     // QueryStreamCoordinator because their candidate-page semantics are intentionally different.
     // ------------------------------------------------------------------
-    public static async Task<QueryResult<TEntity>> QueryWithCount(
+    public static Task<QueryResult<TEntity>> QueryWithCount(
         QueryDefinition query,
         CancellationToken ct = default,
+        int? absoluteMaxRecords = null)
+        => QueryMaterialized(
+            query,
+            query.CountStrategy ?? CountStrategy.Optimized,
+            ct,
+            absoluteMaxRecords);
+
+    private static async Task<QueryResult<TEntity>> QueryMaterialized(
+        QueryDefinition query,
+        CountStrategy? countStrategy,
+        CancellationToken ct,
         int? absoluteMaxRecords = null)
     {
         if (absoluteMaxRecords is < 0) throw new ArgumentOutOfRangeException(nameof(absoluteMaxRecords));
@@ -112,7 +123,6 @@ public static class Data<TEntity, TKey>
         var repo = Repo;
         var q = repo as IQueryRepository<TEntity, TKey> ?? RequireQuery(repo);
         var filterSupport = ResolveFilterSupport(repo);
-        var countStrategy = query.CountStrategy ?? CountStrategy.Optimized;
         query = query.WithCountStrategy(countStrategy);
 
         var hasPagination = query.HasPagination;
@@ -126,7 +136,8 @@ public static class Data<TEntity, TKey>
             {
                 var pre = ValidateCountResult(
                     await q.Count(adapterQuery, ct),
-                    countStrategy,
+                    countStrategy ?? throw new InvalidOperationException(
+                        "A safety-bounded materialized query requires an explicit count strategy."),
                     DataCaps.Describe(repo, repo.GetType().Name));
                 if (pre.Value > absoluteMaxRecords.Value)
                     return Exceeded(pre.Value, pre.IsEstimate);
@@ -205,6 +216,11 @@ public static class Data<TEntity, TKey>
         };
     }
 
+    private static async Task<IReadOnlyList<TEntity>> QueryItems(
+        QueryDefinition query,
+        CancellationToken ct)
+        => (await QueryMaterialized(query, query.CountStrategy, ct).ConfigureAwait(false)).Items;
+
     private static async Task<long> CountCore(QueryDefinition query, CountStrategy strategy, CancellationToken ct)
     {
         using var partition = EntityContext.With(partition: query.Partition);
@@ -262,7 +278,7 @@ public static class Data<TEntity, TKey>
         => All(QueryDefinition.All, ct);
 
     public static async Task<IReadOnlyList<TEntity>> All(QueryDefinition query, CancellationToken ct = default)
-        => (await QueryWithCount(query, ct)).Items;
+        => await QueryItems(query, ct).ConfigureAwait(false);
 
     public static Task<IReadOnlyList<TEntity>> All(Action<ISortBuilder<TEntity>> sort, CancellationToken ct = default)
         => All(QueryDefinition.All.WithSort<TEntity>(sort), ct);
@@ -282,7 +298,8 @@ public static class Data<TEntity, TKey>
     public static async Task<IReadOnlyList<TEntity>> Query(Expression<Func<TEntity, bool>> predicate, QueryDefinition? query, CancellationToken ct = default)
     {
         if (predicate is null) throw new ArgumentNullException(nameof(predicate));
-        return (await QueryWithCount(predicate, query, ct)).Items;
+        var requested = (query ?? QueryDefinition.All).Where(Filter.And(query?.Filter, Lower(predicate)));
+        return await QueryItems(requested, ct).ConfigureAwait(false);
     }
 
     public static Task<IReadOnlyList<TEntity>> Query(Expression<Func<TEntity, bool>> predicate, Action<ISortBuilder<TEntity>> sort, CancellationToken ct = default)
@@ -671,19 +688,10 @@ public static class Data<TEntity, TKey>
 
     private static async Task<IReadOnlyList<TEntity>> PageCore(int page, int size, QueryDefinition query, CancellationToken ct)
     {
-        using var partition = EntityContext.With(partition: query.Partition);
         if (page <= 0) throw new System.ArgumentOutOfRangeException(nameof(page));
         if (size <= 0) throw new System.ArgumentOutOfRangeException(nameof(size));
         var requested = query.WithPagination(page, size).WithCountStrategy(null);
-        var repo = Repo;
-        var q = RequireQuery(repo);
-        var filterSupport = ResolveFilterSupport(repo);
-        var (adapterQuery, residual) = FilterPushdownCoordinator.Plan(requested, filterSupport, typeof(TEntity));
-        var adapterResult = await DataQueryExecution<TEntity, TKey>.QueryCandidates(repo, q, adapterQuery, ct);
-        var pageResult = FilterPushdownCoordinator.Finalize(requested, adapterQuery, residual, adapterResult).Page;
-        await DataQueryExecution<TEntity, TKey>.MaterializeVisible(repo, pageResult, ct);
-        DataQueryExecution<TEntity, TKey>.ValidateEvidence(adapterResult.ReadEvidence, pageResult);
-        return pageResult;
+        return await QueryItems(requested, ct).ConfigureAwait(false);
     }
 
     // ------------------------------------------------------------------
@@ -701,13 +709,13 @@ public static class Data<TEntity, TKey>
     public static async Task<IReadOnlyList<TEntity>> All(string partition, CancellationToken ct = default)
     {
         using var _ = WithPartition(partition);
-        return (await QueryWithCount(QueryDefinition.All, ct)).Items;
+        return await QueryItems(QueryDefinition.All, ct).ConfigureAwait(false);
     }
 
     public static async Task<IReadOnlyList<TEntity>> Query(Expression<Func<TEntity, bool>> predicate, string partition, CancellationToken ct = default)
     {
         using var _ = WithPartition(partition);
-        return (await QueryWithCount(predicate, QueryDefinition.All, ct)).Items;
+        return await Query(predicate, QueryDefinition.All, ct).ConfigureAwait(false);
     }
 
     public static Task<TEntity> Upsert(TEntity model, string partition, CancellationToken ct = default)

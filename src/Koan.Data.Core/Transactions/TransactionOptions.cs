@@ -3,7 +3,7 @@
 namespace Koan.Data.Core.Transactions;
 
 /// <summary>
-/// Configuration options for transaction support.
+/// Configuration options for deferred Entity-operation coordination.
 /// </summary>
 public sealed class TransactionOptions
 {
@@ -13,14 +13,15 @@ public sealed class TransactionOptions
     public const string SectionPath = "Koan:Data:Transactions";
 
     /// <summary>
-    /// Default timeout for transactions. Default: 2 minutes.
+    /// Default timeout for deferred coordination. Default: 2 minutes.
     /// </summary>
     public TimeSpan DefaultTimeout { get; set; } = TimeSpan.FromMinutes(2);
 
     /// <summary>
     /// Whether to automatically COMMIT a transaction on dispose when it was not explicitly committed or
     /// rolled back. Default: false — dispose rolls back (safe, matches .NET TransactionScope: work persists
-    /// only on an explicit Commit()). Set true to opt into auto-commit-on-dispose convenience.
+    /// only on an explicit Commit()). This controls scope exit only and does not add atomicity. Set true to opt
+    /// into auto-commit-on-dispose convenience.
     /// </summary>
     public bool AutoCommitOnDispose { get; set; } = false;
 
@@ -30,13 +31,13 @@ public sealed class TransactionOptions
     public bool EnableTelemetry { get; set; } = true;
 
     /// <summary>
-    /// Maximum number of operations that can be tracked in a single transaction.
+    /// Maximum number of operations that can be tracked in a single coordination scope.
     /// Prevents memory issues with large batches. Default: 10,000.
     /// </summary>
     public int MaxTrackedOperations { get; set; } = 10_000;
 
     /// <summary>
-    /// Warn if transaction duration exceeds this threshold. Default: 30 seconds.
+    /// Warn if coordination duration exceeds this threshold. Default: 30 seconds.
     /// </summary>
     public TimeSpan LongRunningTransactionWarning { get; set; } = TimeSpan.FromSeconds(30);
 }
