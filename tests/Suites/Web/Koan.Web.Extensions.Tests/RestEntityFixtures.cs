@@ -139,6 +139,7 @@ public sealed class MemoAccess : EntityAccess<Memo>
 /// exist — it makes allow-by-default honest.
 /// </summary>
 [RestEntity]
+[Access(read: Access.Anyone, write: Access.Authenticated, remove: Access.Authenticated)]
 [StorageName("rest_sprockets")]
 public sealed class Sprocket : Entity<Sprocket>
 {
@@ -201,6 +202,11 @@ public sealed class TestAuthHandler : AuthenticationHandler<AuthenticationScheme
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (Request.Headers.Authorization.Count > 0)
+        {
+            return Task.FromResult(AuthenticateResult.Fail("The supplied test credential is invalid."));
+        }
+
         var hasScopes = Request.Headers.TryGetValue("X-Test-Scopes", out var scopes);
         var hasRoles = Request.Headers.TryGetValue("X-Test-Roles", out var roles);
         var hasUser = Request.Headers.TryGetValue("X-Test-User", out var user);

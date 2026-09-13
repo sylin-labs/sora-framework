@@ -6,6 +6,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
 using Koan.Core;
 using Koan.Web.Infrastructure;
+using Koan.Web.Middleware;
 using Koan.Web.Options;
 using System.Diagnostics;
 using System.Linq;
@@ -105,6 +106,9 @@ internal sealed class KoanWebStartupFilter(IOptions<KoanWebOptions> options, IOp
                     {
                         // No authentication services registered; ignore.
                     }
+                    // Preserve AuthenticateResult.Fail separately from NoResult. ASP.NET leaves both callers
+                    // anonymous, but a rejected credential must not inherit an Entity's anonymous authority.
+                    app.UseMiddleware<EntityAuthenticationResultMiddleware>();
                     // WEB-0069: modules contribute middleware between authentication and authorization here
                     // (e.g. the zero-config dev identity), via the supported stage seam — no startup-filter ordering.
                     RunStage(app, KoanWebPipelineStage.AfterAuthentication);

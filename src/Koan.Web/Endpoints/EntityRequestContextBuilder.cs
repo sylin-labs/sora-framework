@@ -2,6 +2,7 @@ using System;
 using System.Security.Claims;
 using System.Threading;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -42,8 +43,11 @@ public sealed class EntityRequestContextBuilder
             principal = OriginStamp.Apply(principal, OriginTier.Remote);
         }
 
-        return new EntityRequestContext(provider, options, cancellationToken, httpContext, principal);
+        return new EntityRequestContext(provider, options, cancellationToken, httpContext, principal)
+        {
+            AuthenticationRejected = httpContext?.Features
+                .Get<IAuthenticateResultFeature>()?.AuthenticateResult?.Failure is not null
+        };
     }
 }
-
 

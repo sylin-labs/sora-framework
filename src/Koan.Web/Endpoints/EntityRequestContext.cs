@@ -40,6 +40,12 @@ public sealed class EntityRequestContext
     public ClaimsPrincipal User { get; }
 
     /// <summary>
+    /// True when the selected transport authentication handler rejected a supplied credential. This remains
+    /// internal framework state: applications declare access normally, while the shared endpoint fails closed.
+    /// </summary>
+    internal bool AuthenticationRejected { get; init; }
+
+    /// <summary>
     /// The backing provider's capabilities as the unified <see cref="CapabilitySet"/> (ARCH-0084).
     /// Populated by the endpoint from <c>DataCaps.Describe(repo)</c> — carries both query and write tokens.
     /// </summary>

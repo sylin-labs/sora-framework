@@ -72,6 +72,9 @@ internal sealed class EntityEndpointService<TEntity, TKey> : IEntityEndpointServ
     // place base CRUD is authorized.
     private async Task<AuthorizeDecision?> Gate(EntityRequestContext context, string action)
     {
+        // A selected transport handler explicitly rejected the caller's credential. This is not the anonymous
+        // case: fail before hooks or persistence even when the declared action gate is open/Anyone.
+        if (context.AuthenticationRejected) return AuthorizeDecision.Challenged();
         if (_authorize is null) return null;
         // Memoize per (action) for the lifetime of this request: the operation's guard and AnnotateAccess both
         // ask for the same verbs, so a verb is evaluated through the seam at most once — which matters once an

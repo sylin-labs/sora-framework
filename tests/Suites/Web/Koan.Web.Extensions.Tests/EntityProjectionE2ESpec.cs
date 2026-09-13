@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
 using AwesomeAssertions;
@@ -84,6 +85,43 @@ public sealed class EntityProjectionE2ESpec
         Header(others).Should().Be("read");
     }
 
+    [Fact]
+    public async Task Invalid_bearer_does_not_fall_back_to_anonymous_on_an_anyone_read()
+    {
+        var tag = Tag();
+        var id = await CreateSprocket("invalid-by-id-owner", tag);
+
+        var response = await SendInvalidBearer($"/api/sprocket/{id}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
+            "a credential rejected by the selected handler must not inherit anonymous read authority");
+    }
+
+    [Fact]
+    public async Task Invalid_bearer_does_not_fall_back_to_anonymous_on_an_anyone_collection_read()
+    {
+        var tag = Tag();
+        await CreateSprocket("invalid-collection-owner", tag);
+
+        var response = await SendInvalidBearer(SprocketPath(tag));
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized,
+            "collection reads use the same fail-closed authentication boundary as keyed reads");
+    }
+
+    [Fact]
+    public async Task No_credentials_still_allow_anonymous_anyone_reads()
+    {
+        var tag = Tag();
+        var id = await CreateSprocket("anonymous-control-owner", tag);
+
+        var byId = await _fx.Client.GetAsync($"/api/sprocket/{id}");
+        var collection = await _fx.Client.GetAsync(SprocketPath(tag));
+
+        byId.StatusCode.Should().Be(HttpStatusCode.OK);
+        collection.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     // ── a custom verb participates in the manifest ───────────────────────────────────────────────────────────────
     [Fact]
     public async Task A_custom_verb_appears_in_can_only_for_a_permitted_principal()
@@ -144,6 +182,13 @@ public sealed class EntityProjectionE2ESpec
     {
         var req = new HttpRequestMessage(method, path);
         req.Headers.Add("X-Test-Roles", roles);
+        return _fx.Client.SendAsync(req);
+    }
+
+    private Task<HttpResponseMessage> SendInvalidBearer(string path)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Get, path);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "invalid");
         return _fx.Client.SendAsync(req);
     }
 

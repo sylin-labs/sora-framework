@@ -185,6 +185,10 @@ public sealed class Article : Entity<Article>
 public sealed class ArticlesController : EntityController<Article>;
 ```
 
+`Access.Anyone` means no credential is required; it does not make a rejected credential anonymous. When the selected
+ASP.NET authentication handler returns a failed result for a supplied credential, Koan Entity endpoints return 401
+before reading or mutating data. A request for the same public read with no credential remains anonymous and allowed.
+
 External roles map to `ClaimTypes.Role`; permissions from the local simulator map to `Koan.permission`. Koan maps
 these claims but does not define or normalize a role vocabulary: a role means what the application's authorization
 declares, and refreshing application-owned roles happens in an `IKoanAuthFlowHandler` at sign-in and
