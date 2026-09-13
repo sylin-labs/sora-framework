@@ -61,3 +61,6 @@ receipt path, and run the same filtered test. It proves the new persisted grant
 restores, refreshes, and authenticates as the same DID. Clear the lifecycle
 environment variable afterward. The normal test suite skips this destructive
 local-provider proof unless the mode is explicitly set.
+
+**Working with a coding agent?** [AGENTS.md](../../AGENTS.md) at the repository root orients any
+agent on the Koan conventions this sample follows.
