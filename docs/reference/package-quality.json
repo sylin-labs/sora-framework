@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "source": "evaluated-msbuild-package-graph",
   "summary": {
-    "packages": 107,
+    "packages": 108,
     "repairRequired": 0,
     "reviewRequired": 0,
-    "structurallyReady": 107,
-    "ownedReadmes": 107,
-    "technicalCompanions": 107,
+    "structurallyReady": 108,
+    "ownedReadmes": 108,
+    "technicalCompanions": 108,
     "findings": 0
   },
   "findingDefinitions": [],
@@ -1944,6 +1944,26 @@
       ],
       "readme": "src/Koan.Web.Auth.Abstractions/README.md",
       "technicalDocumentation": "src/Koan.Web.Auth.Abstractions/TECHNICAL.md",
+      "packageIcon": "icon.png",
+      "findings": []
+    },
+    {
+      "packageId": "Sylin.Koan.Web.Auth.Connector.Atproto",
+      "projectPath": "src/Connectors/Web/Auth/Atproto/Koan.Web.Auth.Connector.Atproto.csproj",
+      "shape": "library",
+      "role": "provider",
+      "status": "structurally-ready",
+      "description": "Native AT Protocol identity and authorized session connector for Koan Web Auth.",
+      "targetFrameworks": [
+        "net10.0"
+      ],
+      "dependencies": [
+        "Sylin.Koan.Core",
+        "Sylin.Koan.Web.Auth",
+        "Sylin.Koan.Web.Auth.Abstractions"
+      ],
+      "readme": "src/Connectors/Web/Auth/Atproto/README.md",
+      "technicalDocumentation": "src/Connectors/Web/Auth/Atproto/TECHNICAL.md",
       "packageIcon": "icon.png",
       "findings": []
     },

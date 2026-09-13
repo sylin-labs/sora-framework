@@ -25,7 +25,7 @@ the capability map. Once the answer is yes, the map carries the exact package an
 | AI runtime | Hugging Face ⚠ · LlamaCpp · LM Studio · Ollama · ONNX |
 | Object storage | Local · S3 ⚠ |
 | Cache tier | Redis ⚠ · SQLite |
-| Sign-in provider | Discord · Google · Microsoft · Test |
+| Sign-in provider | Atproto ⚠ · Discord · Google · Microsoft · Test |
 | Message transport | RabbitMQ |
 
 **⚠ carries no product claim.** It is installable and documented, and nothing has been promised

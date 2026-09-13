@@ -1,8 +1,18 @@
-# AT Protocol sign-in
+# Sylin.Koan.Web.Auth.Connector.Atproto
 
-Reference `Sylin.Koan.Web.Auth.Connector.Atproto` and keep `builder.Services.AddKoan()`.
-This source contribution adds native AT OAuth as a public client using CarpaNet.OAuth
-1.1.0-alpha.5. It is not yet a published-package or production-certification claim.
+Native AT Protocol sign-in and authorized sessions for Koan Web Auth. The connector uses
+CarpaNet.OAuth 1.1.0-alpha.5 and claims only the documented public-client flow and boundaries.
+
+## Install
+
+```powershell
+dotnet add package Sylin.Koan.Web.Auth.Connector.Atproto
+```
+
+Keep the application bootstrap ordinary: reference the package and call
+`builder.Services.AddKoan()`; do not register an authentication scheme or callback manually.
+
+## Meaningful use
 
 Keep `PlcDirectory` at the public default when accepting public accounts. A mixed
 development network can set `DevelopmentPlcDirectory` for only the handles/DIDs
@@ -96,7 +106,9 @@ reuses the same network guards while the caller owns headers and credential cont
 `AtprotoSessions.ResolveDid(did, ct)` returns the SDK DID document after an exact
 identifier check. Neither API exposes stored OAuth secrets or the raw HttpClient.
 
-## Custody and development
+## Guarantees and boundaries
+
+### Custody and development
 
 Persist the session directory and the ASP.NET Data Protection key ring. Protocol
 state and sessions are encrypted with that key ring; token/key material is not

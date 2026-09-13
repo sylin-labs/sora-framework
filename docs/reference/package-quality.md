@@ -22,7 +22,7 @@ This report separates objective package repairs from human review. `structurally
 
 | Packages | Repair required | Review required | Structurally ready | Owned READMEs | Technical companions | Findings |
 |---:|---:|---:|---:|---:|---:|---:|
-| 107 | 0 | 0 | 107 | 107 | 107 | 0 |
+| 108 | 0 | 0 | 108 | 108 | 108 | 0 |
 
 ## Packages
 
@@ -124,6 +124,7 @@ This report separates objective package repairs from human review. `structurally
 | `Sylin.Koan.Web.Admin`<br>[`src/Koan.Web.Admin/Koan.Web.Admin.csproj`](../../src/Koan.Web.Admin/Koan.Web.Admin.csproj) | projection / library<br>net10.0 | `structurally-ready` | [README](../../src/Koan.Web.Admin/README.md)<br>[TECHNICAL](../../src/Koan.Web.Admin/TECHNICAL.md) | none |
 | `Sylin.Koan.Web.Auth`<br>[`src/Koan.Web.Auth/Koan.Web.Auth.csproj`](../../src/Koan.Web.Auth/Koan.Web.Auth.csproj) | projection / library<br>net10.0 | `structurally-ready` | [README](../../src/Koan.Web.Auth/README.md)<br>[TECHNICAL](../../src/Koan.Web.Auth/TECHNICAL.md) | none |
 | `Sylin.Koan.Web.Auth.Abstractions`<br>[`src/Koan.Web.Auth.Abstractions/Koan.Web.Auth.Abstractions.csproj`](../../src/Koan.Web.Auth.Abstractions/Koan.Web.Auth.Abstractions.csproj) | contracts / library<br>net10.0 | `structurally-ready` | [README](../../src/Koan.Web.Auth.Abstractions/README.md)<br>[TECHNICAL](../../src/Koan.Web.Auth.Abstractions/TECHNICAL.md) | none |
+| `Sylin.Koan.Web.Auth.Connector.Atproto`<br>[`src/Connectors/Web/Auth/Atproto/Koan.Web.Auth.Connector.Atproto.csproj`](../../src/Connectors/Web/Auth/Atproto/Koan.Web.Auth.Connector.Atproto.csproj) | provider / library<br>net10.0 | `structurally-ready` | [README](../../src/Connectors/Web/Auth/Atproto/README.md)<br>[TECHNICAL](../../src/Connectors/Web/Auth/Atproto/TECHNICAL.md) | none |
 | `Sylin.Koan.Web.Auth.Connector.Discord`<br>[`src/Connectors/Web/Auth/Discord/Koan.Web.Auth.Connector.Discord.csproj`](../../src/Connectors/Web/Auth/Discord/Koan.Web.Auth.Connector.Discord.csproj) | provider / library<br>net10.0 | `structurally-ready` | [README](../../src/Connectors/Web/Auth/Discord/README.md)<br>[TECHNICAL](../../src/Connectors/Web/Auth/Discord/TECHNICAL.md) | none |
 | `Sylin.Koan.Web.Auth.Connector.Google`<br>[`src/Connectors/Web/Auth/Google/Koan.Web.Auth.Connector.Google.csproj`](../../src/Connectors/Web/Auth/Google/Koan.Web.Auth.Connector.Google.csproj) | provider / library<br>net10.0 | `structurally-ready` | [README](../../src/Connectors/Web/Auth/Google/README.md)<br>[TECHNICAL](../../src/Connectors/Web/Auth/Google/TECHNICAL.md) | none |
 | `Sylin.Koan.Web.Auth.Connector.Microsoft`<br>[`src/Connectors/Web/Auth/Microsoft/Koan.Web.Auth.Connector.Microsoft.csproj`](../../src/Connectors/Web/Auth/Microsoft/Koan.Web.Auth.Connector.Microsoft.csproj) | provider / library<br>net10.0 | `structurally-ready` | [README](../../src/Connectors/Web/Auth/Microsoft/README.md)<br>[TECHNICAL](../../src/Connectors/Web/Auth/Microsoft/TECHNICAL.md) | none |
