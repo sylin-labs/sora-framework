@@ -2,7 +2,7 @@
   "Sylin.Koan.Core": "1.0.39",
   "Sylin.Koan.Data.Core": "1.0.71",
   "Sylin.Koan.Web": "1.0.67",
-  "Sylin.Koan.Web.Sse": "1.0.53",
+  "Sylin.Koan.Web.Sse": "1.0.54",
   "Sylin.Koan.Security.Trust": "1.0.21",
-  "$transitive": "CA08FF8C01B7615CA7B4C6C83FF2A6E63CD18C9370056123EF113456036FC051"
+  "$transitive": "C6830CD4C18EA43EFB32FBAF4441999E3AE347740D91A8BB5DC5BE9DCBB42B19"
 }
