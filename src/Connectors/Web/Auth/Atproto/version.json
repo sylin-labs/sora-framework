@@ -1,0 +1,14 @@
+{
+  "$schema": "https://raw.githubusercontent.com/dotnet/Nerdbank.GitVersioning/main/src/NerdBank.GitVersioning/version.schema.json",
+  "version": "1.0",
+  "versionHeightOffset": 0,
+  "pathFilters": [
+    ".",
+    ":^./version.json",
+    ":/Directory.Build.props",
+    ":/Directory.Build.targets",
+    ":/Directory.Packages.props",
+    ":/build",
+    ":/global.json"
+  ]
+}
